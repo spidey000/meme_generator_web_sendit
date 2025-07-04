@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "NPM_CONFIG_OPTIONAL=false vite build",
     "preview": "vite preview"
   },
   "dependencies": {
