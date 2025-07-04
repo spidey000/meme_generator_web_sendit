@@ -1,3 +1,4 @@
+// Fix: Re-trigger TypeScript language server
 
 import React from 'react';
 import { Layer, TextLayerProps, StickerLayerProps, LayerType, InteractionType } from '../types';
@@ -86,10 +87,26 @@ const LayerRenderer: React.FC<LayerRendererProps> = ({ layer, isSelected, onSele
 
     if (layer.type === LayerType.STICKER) {
       const stickerLayer = layer as StickerLayerProps;
+      
+      // Calculate dimensions to maintain aspect ratio within the layer's bounding box
+      let renderWidth = width; // 'width' and 'height' here refer to the layer's dimensions
+      let renderHeight = height;
+
+      if (stickerLayer.aspectRatio) {
+        const layerAspectRatio = width / height;
+        if (layerAspectRatio > stickerLayer.aspectRatio) {
+          // Layer is wider than sticker, constrain by height
+          renderWidth = height * stickerLayer.aspectRatio;
+        } else {
+          // Layer is taller than sticker, constrain by width
+          renderHeight = width / stickerLayer.aspectRatio;
+        }
+      }
+
       const stickerStyles: React.CSSProperties = {
-        width: '100%',
-        height: '100%',
-        objectFit: 'contain',
+        width: `${renderWidth}px`,
+        height: `${renderHeight}px`,
+        objectFit: 'contain', // Keep for visual clarity, but explicit dimensions are primary
         pointerEvents: 'none',
         filter: '', // Initialize filter string
       };

@@ -74,8 +74,8 @@ const App: React.FC = () => {
       const img = new Image();
       img.onload = () => {
         const aspectRatio = img.width / img.height;
-        const initialWidth = 100;
-        const initialHeight = initialWidth / aspectRatio;
+        const initialWidth = img.naturalWidth;
+        const initialHeight = img.naturalHeight;
         
         const { text: _text, fontFamily: _fontFamily, fontSize: _fontSize, color: _color,
                 outlineColor: _outlineColor, outlineWidth: _outlineWidth,
