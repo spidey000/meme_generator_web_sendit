@@ -3,6 +3,9 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "engines": {
+    "node": "20.x"
+  },
   "scripts": {
     "dev": "vite",
     "build": "NPM_CONFIG_OPTIONAL=false VITE_CJS_IGNORE_WARNINGS=true vite build",
