@@ -93,13 +93,13 @@ const LayerRenderer: React.FC<LayerRendererProps> = ({ layer, isSelected, onSele
       let renderHeight = height;
 
       if (stickerLayer.aspectRatio) {
-        const layerAspectRatio = width / height;
-        if (layerAspectRatio > stickerLayer.aspectRatio) {
+        const layerAspectRatio = (width || 1) / (height || 1); // Use 1 to prevent division by zero
+        if (stickerLayer.aspectRatio && layerAspectRatio > stickerLayer.aspectRatio) {
           // Layer is wider than sticker, constrain by height
-          renderWidth = height * stickerLayer.aspectRatio;
-        } else {
+          renderWidth = (height || 0) * stickerLayer.aspectRatio;
+        } else if (stickerLayer.aspectRatio) {
           // Layer is taller than sticker, constrain by width
-          renderHeight = width / stickerLayer.aspectRatio;
+          renderHeight = (width || 0) / stickerLayer.aspectRatio;
         }
       }
 

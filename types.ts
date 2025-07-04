@@ -9,8 +9,8 @@ export interface CommonLayerProps {
   type: LayerType;
   x: number;
   y: number;
-  width: number;
-  height: number;
+  width?: number; // Make optional
+  height?: number; // Make optional
   rotation: number;
   zIndex: number;
   aspectRatio?: number; // Added for stickers, optional for text

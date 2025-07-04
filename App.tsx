@@ -46,27 +46,27 @@ const App: React.FC = () => {
   };
 
   const addNewLayer = useCallback(<T extends LayerType,>(type: T, props: Partial<Layer> = {}) => {
-    const newLayerBase: CommonLayerProps = { 
+    const commonProps: Omit<CommonLayerProps, 'type' | 'width' | 'height'> = {
       id: `layer-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      type: type,
       x: 50,
       y: 50,
-      width: type === LayerType.TEXT ? 250 : 100,
-      height: type === LayerType.TEXT ? 80 : 100,
       rotation: 0,
       zIndex: nextZIndex,
     };
 
-    let newLayer: Layer;
-
     if (type === LayerType.TEXT) {
-      const { aspectRatio: _aspectRatio, src: _src, alt: _alt, ...relevantOverrides } = props as Partial<StickerLayerProps>;
-      newLayer = {
-        ...newLayerBase,
+      const relevantOverrides = props as Partial<TextLayerProps>;
+      const newLayer: TextLayerProps = {
+        ...commonProps,
+        type: LayerType.TEXT as const, // Explicitly assert type
+        width: 250,
+        height: 80,
         ...INITIAL_TEXT_LAYER,
         ...relevantOverrides,
-        type: LayerType.TEXT,
-      } as TextLayerProps;
+      };
+      setLayers(prevLayers => [...prevLayers, newLayer]);
+      setSelectedLayerId(newLayer.id);
+      setNextZIndex(prevZ => Math.min(prevZ + 1, MAX_Z_INDEX));
     } else if (type === LayerType.STICKER) {
       const castedProps = props as Partial<StickerLayerProps>;
       if (!castedProps.src) return;
@@ -74,41 +74,55 @@ const App: React.FC = () => {
       const img = new Image();
       img.onload = () => {
         const aspectRatio = img.width / img.height;
-        const initialWidth = img.naturalWidth;
-        const initialHeight = img.naturalHeight;
+        let initialWidth = img.naturalWidth;
+        let initialHeight = img.naturalHeight;
+
+        if (mainCanvasAreaRef.current) {
+          const canvasRect = mainCanvasAreaRef.current.getBoundingClientRect();
+          const maxStickerWidth = canvasRect.width / 4;
+          const maxStickerHeight = canvasRect.height / 4;
+
+          if (initialWidth > maxStickerWidth || initialHeight > maxStickerHeight) {
+            const widthRatio = maxStickerWidth / initialWidth;
+            const heightRatio = maxStickerHeight / initialHeight;
+            const scale = Math.min(widthRatio, heightRatio);
+
+            initialWidth *= scale;
+            initialHeight *= scale;
+          }
+        }
         
-        const { text: _text, fontFamily: _fontFamily, fontSize: _fontSize, color: _color,
-                outlineColor: _outlineColor, outlineWidth: _outlineWidth,
-                shadowColor: _shadowColor, shadowBlur: _shadowBlur, shadowOffsetX: _shadowOffsetX, shadowOffsetY: _shadowOffsetY,
-                glowColor: _glowColor, glowStrength: _glowStrength,
-                ...relevantOverrides
-              } = props as Partial<TextLayerProps>;
+        const relevantOverrides: Partial<StickerLayerProps> = {
+          outlineColor: castedProps.outlineColor,
+          outlineWidth: castedProps.outlineWidth,
+          shadowColor: castedProps.shadowColor,
+          shadowBlur: castedProps.shadowBlur,
+          shadowOffsetX: castedProps.shadowOffsetX,
+          shadowOffsetY: castedProps.shadowOffsetY,
+          glowColor: castedProps.glowColor,
+          glowStrength: castedProps.glowStrength,
+        };
 
         const stickerToAdd: StickerLayerProps = {
-          ...newLayerBase,
-          width: initialWidth,
-          height: initialHeight,
-          ...INITIAL_STICKER_LAYER, // Contains no specific props, just for structure
-          ...relevantOverrides,
+          ...commonProps,
+          type: LayerType.STICKER as const, // Explicitly assert type
           src: castedProps.src!,
           alt: castedProps.alt || 'Sticker',
-          type: LayerType.STICKER,
           aspectRatio: aspectRatio,
+          width: initialWidth,
+          height: initialHeight,
+          ...INITIAL_STICKER_LAYER,
+          ...relevantOverrides,
         };
         setLayers(prevLayers => [...prevLayers, stickerToAdd]);
         setSelectedLayerId(stickerToAdd.id);
         setNextZIndex(prevZ => Math.min(prevZ + 1, MAX_Z_INDEX));
       };
       img.src = castedProps.src;
-      return; // Layer addition is async due to image loading for aspect ratio
     } else {
       console.error("Invalid layer type requested:", type);
-      return; 
+      return;
     }
-    
-    setLayers(prevLayers => [...prevLayers, newLayer]);
-    setSelectedLayerId(newLayer.id);
-    setNextZIndex(prevZ => Math.min(prevZ + 1, MAX_Z_INDEX));
   }, [nextZIndex]);
 
   const updateLayer = useCallback((id: string, newProps: Partial<Layer>) => {
@@ -271,18 +285,18 @@ const App: React.FC = () => {
           if (layerType === LayerType.STICKER && originalLayer.aspectRatio) {
             // Resize maintaining aspect ratio (sticker) - from bottom right
             // Prioritize width change and calculate height, or use diagonal logic
-            newWidth = Math.max(MIN_LAYER_DIMENSION, originalLayer.width + deltaX);
-            newHeight = Math.max(MIN_LAYER_DIMENSION, newWidth / originalLayer.aspectRatio);
+            newWidth = Math.max(MIN_LAYER_DIMENSION, (originalLayer.width || 0) + deltaX);
+            newHeight = Math.max(MIN_LAYER_DIMENSION, newWidth / (originalLayer.aspectRatio || 1));
             // If height driven by deltaY is proportionally larger, use that
-            const heightFromDeltaY = Math.max(MIN_LAYER_DIMENSION, originalLayer.height + deltaY);
-            if (heightFromDeltaY / originalLayer.aspectRatio > newWidth) {
+            const heightFromDeltaY = Math.max(MIN_LAYER_DIMENSION, (originalLayer.height || 0) + deltaY);
+            if (heightFromDeltaY / (originalLayer.aspectRatio || 1) > newWidth) {
                 newHeight = heightFromDeltaY;
-                newWidth = Math.max(MIN_LAYER_DIMENSION, newHeight * originalLayer.aspectRatio);
+                newWidth = Math.max(MIN_LAYER_DIMENSION, newHeight * (originalLayer.aspectRatio || 1));
             }
 
           } else { // Text layer or sticker without aspect ratio (fallback)
-            newWidth = Math.max(MIN_LAYER_DIMENSION, originalLayer.width + deltaX);
-            newHeight = Math.max(MIN_LAYER_DIMENSION, originalLayer.height + deltaY);
+            newWidth = Math.max(MIN_LAYER_DIMENSION, (originalLayer.width || 0) + deltaX);
+            newHeight = Math.max(MIN_LAYER_DIMENSION, (originalLayer.height || 0) + deltaY);
           }
         } else if (interactionType === 'rotate') {
           const { layerCenterX, layerCenterY, initialMouseAngleToCenterRad, originalLayerRotationRad } = activeInteraction;
