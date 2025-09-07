@@ -1,4 +1,3 @@
-
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { Layer, LayerType, TextLayerProps, StickerLayerProps, CommonLayerProps, MemeTemplateOption, ActiveInteraction, InteractionType, StickerOption } from './types';
 import { BRAND_COLORS, INITIAL_TEXT_LAYER, MAX_Z_INDEX, MIN_LAYER_DIMENSION, INITIAL_STICKER_LAYER } from './constants';
@@ -6,7 +5,9 @@ import MemeCanvas from './components/MemeCanvas';
 import Toolbar from './components/Toolbar';
 import MemeTemplateGallery from './components/MemeTemplateGallery';
 import html2canvas from 'html2canvas';
-
+import { useTelegram } from '@/lib/hooks/useTelegram';
+import { TelegramActions } from '@/components/TelegramActions';
+import './styles/telegram.css';
 
 const App: React.FC = () => {
   const [baseImage, setBaseImage] = useState<string | null>(null);
@@ -20,6 +21,32 @@ const App: React.FC = () => {
   const [activeInteraction, setActiveInteraction] = useState<ActiveInteraction | null>(null);
   const memeCanvasRef = useRef<HTMLDivElement>(null); // For canvas area bounds & click outside
   const mainCanvasAreaRef = useRef<HTMLDivElement>(null); // Ref for the main canvas area for interaction bounds
+
+  const { isTelegramWebApp, setupMainButton, hideMainButton, showAlert } = useTelegram();
+
+  const hasContent = baseImage || layers.length > 0;
+
+  useEffect(() => {
+    if (!isTelegramWebApp) return;
+
+    if (hasContent) {
+      setupMainButton('Share Meme 📤', () => {
+        // Scroll to Telegram actions or trigger share
+        const telegramActions = document.querySelector('.telegram-actions');
+        if (telegramActions) {
+          telegramActions.scrollIntoView({ behavior: 'smooth' });
+        }
+      });
+    } else {
+      setupMainButton('Get Started 🎨', () => {
+        showAlert('Upload an image or choose a template to start creating!');
+      });
+    }
+
+    return () => {
+      hideMainButton();
+    };
+  }, [isTelegramWebApp, hasContent, setupMainButton, hideMainButton, showAlert]);
 
   const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files[0]) {
@@ -393,9 +420,9 @@ const App: React.FC = () => {
 
 
   return (
-    <div className="flex flex-col h-screen bg-primary-bg text-text-white font-sans">
+    <div className={`flex flex-col h-screen bg-primary-bg text-text-white font-sans ${isTelegramWebApp ? 'telegram-webapp' : ''}`}>
       <header className="p-3 sm:p-4 bg-brand-black shadow-md flex justify-between items-center border-b-2 border-accent-green">
-        <h1 className="text-2xl sm:text-3xl font-bold text-accent-green">SENDIT.MEME</h1>
+        <h1 className="text-2xl sm:text-3xl font-bold text-accent-green">SENDIT.MEME{isTelegramWebApp && <span className="ml-2 text-sm">📱 Telegram</span>}</h1>
         <div className="flex items-center space-x-2 sm:space-x-3">
           <button
             onClick={() => setShowMemeTemplateGallery(true)}
@@ -413,7 +440,7 @@ const App: React.FC = () => {
             onChange={handleImageUpload}
             className="hidden"
           />
-          {baseImage && (
+          {baseImage && !isTelegramWebApp && (
              <button 
                 onClick={handleExportMeme}
                 className={`px-3 py-1.5 sm:px-4 sm:py-2 bg-accent-green text-brand-black font-semibold rounded-md hover:bg-opacity-80 transition-colors duration-150 text-xs sm:text-sm`}
@@ -474,7 +501,23 @@ const App: React.FC = () => {
               </div>
             </div>
           )}
+           {isTelegramWebApp && (
+              <div className="mt-6">
+                <TelegramActions
+                  memeCanvasRef={memeCanvasRef}
+                  hasLayers={hasContent}
+                  className="lg:hidden" // Show on mobile
+                />
+              </div>
+            )}
         </main>
+         {isTelegramWebApp && (
+              <TelegramActions
+                memeCanvasRef={memeCanvasRef}
+                hasLayers={hasContent}
+                className="hidden lg:block"
+              />
+            )}
       </div>
       {showMemeTemplateGallery && (
         <MemeTemplateGallery 

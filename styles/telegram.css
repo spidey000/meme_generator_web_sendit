@@ -1,0 +1,63 @@
+
+
+/* Telegram Web App specific styles */
+.telegram-webapp {
+  /* Use Telegram theme colors when available */
+  background-color: var(--tg-bg-color, #0F0F0F);
+  color: var(--tg-text-color, #FFFFFF);
+}
+
+.telegram-webapp .bg-gray-900 {
+  background-color: var(--tg-bg-color, #0F0F0F) !important;
+}
+
+.telegram-webapp .text-white {
+  color: var(--tg-text-color, #FFFFFF) !important;
+}
+
+.telegram-webapp .bg-green-500 {
+  background-color: var(--tg-button-color, #00FF7F) !important;
+}
+
+/* Enhanced mobile experience for Telegram */
+@media (max-width: 768px) {
+  .telegram-webapp .container {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+  
+  .telegram-webapp .flex-col.lg\\:flex-row {
+    gap: 1rem;
+  }
+  
+  /* Make buttons more touch-friendly */
+  .telegram-webapp button {
+    min-height: 44px;
+  }
+  
+  /* Improve canvas area for mobile */
+  .telegram-webapp [data-canvas-container] {
+    max-width: 100%;
+    overflow-x: auto;
+  }
+}
+
+/* Telegram action buttons styling */
+.telegram-actions button {
+  transition: all 0.2s ease;
+}
+
+.telegram-actions button:hover {
+  transform: translateY(-2px);
+}
+
+.telegram-actions button:active {
+  transform: translateY(0);
+}
+
+/* Loading states */
+.telegram-loading {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
