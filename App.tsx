@@ -1,4 +1,3 @@
-
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { Layer, LayerType, TextLayerProps, StickerLayerProps, CommonLayerProps, MemeTemplateOption, ActiveInteraction, InteractionType, StickerOption } from './types';
 import { BRAND_COLORS, INITIAL_TEXT_LAYER, MAX_Z_INDEX, MIN_LAYER_DIMENSION, INITIAL_STICKER_LAYER } from './constants';
@@ -8,7 +7,15 @@ import MemeTemplateGallery from './components/MemeTemplateGallery';
 import html2canvas from 'html2canvas';
 import { useTelegram } from '@/lib/hooks/useTelegram';
 import { TelegramActions } from '@/components/TelegramActions';
+import measureText from '@/lib/utils/textMeasurement';
 import './styles/telegram.css';
+
+// Constants for effect padding
+const TEXT_EFFECTS_HORIZONTAL_PADDING = 40; // Example: 20px left + 20px right for shadows/glows/outlines
+const TEXT_EFFECTS_VERTICAL_PADDING = 40;   // Example: 20px top + 20px bottom
+
+const STICKER_EFFECTS_HORIZONTAL_PADDING = 40; // Similar for stickers
+const STICKER_EFFECTS_VERTICAL_PADDING = 40;
 
 const App: React.FC = () => {
   const [baseImage, setBaseImage] = useState<string | null>(null);
@@ -99,11 +106,20 @@ const App: React.FC = () => {
 
     if (type === LayerType.TEXT) {
       const relevantOverrides = props as Partial<TextLayerProps>;
+      const initialText = relevantOverrides.text || INITIAL_TEXT_LAYER.text;
+      const initialFontFamily = relevantOverrides.fontFamily || INITIAL_TEXT_LAYER.fontFamily;
+      const initialFontSize = relevantOverrides.fontSize || INITIAL_TEXT_LAYER.fontSize;
+
+      const measuredSize = measureText(initialText, {
+        fontFamily: initialFontFamily,
+        fontSize: initialFontSize,
+      });
+
       const newLayer: TextLayerProps = {
         ...commonProps,
         type: LayerType.TEXT as const,
-        width: 250,
-        height: 80,
+        width: measuredSize.width + TEXT_EFFECTS_HORIZONTAL_PADDING,
+        height: measuredSize.height + TEXT_EFFECTS_VERTICAL_PADDING,
         ...INITIAL_TEXT_LAYER,
         ...relevantOverrides,
       };
@@ -141,8 +157,8 @@ const App: React.FC = () => {
           src: castedProps.src!,
           alt: castedProps.alt || 'Sticker',
           aspectRatio: aspectRatio,
-          width: initialWidth,
-          height: initialHeight,
+          width: initialWidth + STICKER_EFFECTS_HORIZONTAL_PADDING,
+          height: initialHeight + STICKER_EFFECTS_VERTICAL_PADDING,
           ...INITIAL_STICKER_LAYER,
           ...(props as Partial<StickerLayerProps>),
         };
@@ -161,11 +177,44 @@ const App: React.FC = () => {
     setLayers(prevLayers =>
       prevLayers.map(layer => {
         if (layer.id === id) {
-          if (layer.type === LayerType.TEXT && newProps.type === undefined) {
-            const { src, alt, aspectRatio, ...textUpdates } = newProps as any;
-            return { ...layer, ...textUpdates, type: LayerType.TEXT };
-          } else if (layer.type === LayerType.STICKER && newProps.type === undefined) {
-            return { ...layer, ...newProps, type: LayerType.STICKER };
+          if (layer.type === LayerType.TEXT) {
+            const currentTextLayer = layer as TextLayerProps;
+            const updatedTextLayer = { ...currentTextLayer, ...newProps } as TextLayerProps;
+
+            // Recalculate dimensions if text content or font styles change
+            if (
+              newProps.text !== undefined ||
+              newProps.fontFamily !== undefined ||
+              newProps.fontSize !== undefined
+            ) {
+              const measuredSize = measureText(updatedTextLayer.text, {
+                fontFamily: updatedTextLayer.fontFamily,
+                fontSize: updatedTextLayer.fontSize,
+              });
+              updatedTextLayer.width = measuredSize.width + TEXT_EFFECTS_HORIZONTAL_PADDING;
+              updatedTextLayer.height = measuredSize.height + TEXT_EFFECTS_VERTICAL_PADDING;
+            }
+            return updatedTextLayer;
+          } else if (layer.type === LayerType.STICKER) {
+            const currentStickerLayer = layer as StickerLayerProps;
+            const updatedStickerLayer = { ...currentStickerLayer, ...newProps } as StickerLayerProps;
+
+            // If effect properties change, ensure padding is still applied
+            // This assumes the base image dimensions are constant after initial load
+            if (
+                newProps.outlineWidth !== undefined || newProps.outlineColor !== undefined ||
+                newProps.shadowBlur !== undefined || newProps.shadowColor !== undefined ||
+                newProps.shadowOffsetX !== undefined || newProps.shadowOffsetY !== undefined ||
+                newProps.glowStrength !== undefined || newProps.glowColor !== undefined
+            ) {
+                // Re-apply padding to original dimensions if effects change
+                // This is a simplification; ideally, you'd track the original image dimensions separately
+                // For now, we assume the width/height in the layer is the base image size + padding
+                // So, we just ensure the padding is there.
+                updatedStickerLayer.width = (updatedStickerLayer.width - STICKER_EFFECTS_HORIZONTAL_PADDING) + STICKER_EFFECTS_HORIZONTAL_PADDING;
+                updatedStickerLayer.height = (updatedStickerLayer.height - STICKER_EFFECTS_VERTICAL_PADDING) + STICKER_EFFECTS_VERTICAL_PADDING;
+            }
+            return updatedStickerLayer;
           }
           return { ...layer, ...newProps };
         }
