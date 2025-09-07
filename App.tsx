@@ -1,3 +1,4 @@
+
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { Layer, LayerType, TextLayerProps, StickerLayerProps, CommonLayerProps, MemeTemplateOption, ActiveInteraction, InteractionType, StickerOption } from './types';
 import { BRAND_COLORS, INITIAL_TEXT_LAYER, MAX_Z_INDEX, MIN_LAYER_DIMENSION, INITIAL_STICKER_LAYER } from './constants';
@@ -11,6 +12,7 @@ import './styles/telegram.css';
 
 const App: React.FC = () => {
   const [baseImage, setBaseImage] = useState<string | null>(null);
+  const [imageDimensions, setImageDimensions] = useState<{ width: number; height: number } | null>(null);
   const [layers, setLayers] = useState<Layer[]>([]);
   const [selectedLayerId, setSelectedLayerId] = useState<string | null>(null);
   const [nextZIndex, setNextZIndex] = useState<number>(1);
@@ -19,20 +21,42 @@ const App: React.FC = () => {
   const [dynamicStickers, setDynamicStickers] = useState<StickerOption[]>([]);
   
   const [activeInteraction, setActiveInteraction] = useState<ActiveInteraction | null>(null);
-  const memeCanvasRef = useRef<HTMLDivElement>(null); // For canvas area bounds & click outside
-  const mainCanvasAreaRef = useRef<HTMLDivElement>(null); // Ref for the main canvas area for interaction bounds
+  const memeCanvasRef = useRef<HTMLDivElement>(null);
+  const mainCanvasAreaRef = useRef<HTMLDivElement>(null);
 
   const { isTelegramWebApp, setupMainButton, hideMainButton, showAlert } = useTelegram();
 
   const hasContent = baseImage || layers.length > 0;
+
+  const resetCanvas = () => {
+    setLayers([]);
+    setSelectedLayerId(null);
+    setNextZIndex(1);
+    setActiveInteraction(null);
+    setImageDimensions(null);
+  };
+
+  const handleSetBaseImage = (src: string) => {
+    const img = new Image();
+    img.onload = () => {
+      setImageDimensions({ width: img.naturalWidth, height: img.naturalHeight });
+      setBaseImage(src);
+      resetCanvas(); // Reset layers and other states, but not the new dimensions
+    };
+    img.onerror = () => {
+        showAlert("Couldn't load the selected image.");
+        setBaseImage(null);
+        setImageDimensions(null);
+    };
+    img.src = src;
+  };
 
   useEffect(() => {
     if (!isTelegramWebApp) return;
 
     if (hasContent) {
       setupMainButton('Share Meme 📤', () => {
-        // Scroll to Telegram actions or trigger share
-        const telegramActions = document.querySelector('.telegram-actions');
+        const telegramActions = document.querySelector('.telegram-actions-banner');
         if (telegramActions) {
           telegramActions.scrollIntoView({ behavior: 'smooth' });
         }
@@ -52,11 +76,7 @@ const App: React.FC = () => {
     if (event.target.files && event.target.files[0]) {
       const reader = new FileReader();
       reader.onload = (e) => {
-        setBaseImage(e.target?.result as string);
-        setLayers([]);
-        setSelectedLayerId(null);
-        setNextZIndex(1);
-        setActiveInteraction(null);
+        handleSetBaseImage(e.target?.result as string);
       };
       reader.readAsDataURL(event.target.files[0]);
       event.target.value = '';
@@ -64,11 +84,7 @@ const App: React.FC = () => {
   };
 
   const handleSelectMemeTemplate = (template: MemeTemplateOption) => {
-    setBaseImage(template.src);
-    setLayers([]);
-    setSelectedLayerId(null);
-    setNextZIndex(1);
-    setActiveInteraction(null);
+    handleSetBaseImage(template.src);
     setShowMemeTemplateGallery(false);
   };
 
@@ -85,7 +101,7 @@ const App: React.FC = () => {
       const relevantOverrides = props as Partial<TextLayerProps>;
       const newLayer: TextLayerProps = {
         ...commonProps,
-        type: LayerType.TEXT as const, // Explicitly assert type
+        type: LayerType.TEXT as const,
         width: 250,
         height: 80,
         ...INITIAL_TEXT_LAYER,
@@ -119,27 +135,16 @@ const App: React.FC = () => {
           }
         }
         
-        const relevantOverrides: Partial<StickerLayerProps> = {
-          outlineColor: castedProps.outlineColor,
-          outlineWidth: castedProps.outlineWidth,
-          shadowColor: castedProps.shadowColor,
-          shadowBlur: castedProps.shadowBlur,
-          shadowOffsetX: castedProps.shadowOffsetX,
-          shadowOffsetY: castedProps.shadowOffsetY,
-          glowColor: castedProps.glowColor,
-          glowStrength: castedProps.glowStrength,
-        };
-
         const stickerToAdd: StickerLayerProps = {
           ...commonProps,
-          type: LayerType.STICKER as const, // Explicitly assert type
+          type: LayerType.STICKER as const,
           src: castedProps.src!,
           alt: castedProps.alt || 'Sticker',
           aspectRatio: aspectRatio,
           width: initialWidth,
           height: initialHeight,
           ...INITIAL_STICKER_LAYER,
-          ...relevantOverrides,
+          ...(props as Partial<StickerLayerProps>),
         };
         setLayers(prevLayers => [...prevLayers, stickerToAdd]);
         setSelectedLayerId(stickerToAdd.id);
@@ -156,20 +161,16 @@ const App: React.FC = () => {
     setLayers(prevLayers =>
       prevLayers.map(layer => {
         if (layer.id === id) {
-          // Preserve type and merge, prevent incompatible props
           if (layer.type === LayerType.TEXT && newProps.type === undefined) {
             const { src, alt, aspectRatio, ...textUpdates } = newProps as any;
             return { ...layer, ...textUpdates, type: LayerType.TEXT };
           } else if (layer.type === LayerType.STICKER && newProps.type === undefined) {
-            // For sticker layers, directly merge newProps.
-            // The newProps will contain the updated effect properties (outline, shadow, glow)
-            // which are now part of StickerLayerProps.
             return { ...layer, ...newProps, type: LayerType.STICKER };
           }
-          return { ...layer, ...newProps }; // Allow type change if explicitly provided
+          return { ...layer, ...newProps };
         }
         return layer;
-      }).filter(Boolean) as Layer[] // Filter out potential nulls if robust error handling added
+      }).filter(Boolean) as Layer[]
     );
   }, []);
   
@@ -197,8 +198,8 @@ const App: React.FC = () => {
   const handleExportMeme = () => {
     setSelectedLayerId(null); 
     requestAnimationFrame(() => {
-      if (memeCanvasRef.current) { // This ref is on MemeCanvas component's outer div
-        const canvasAreaToCapture = memeCanvasRef.current.querySelector('#meme-canvas-interactive-area'); // Target specific inner div
+      if (memeCanvasRef.current) {
+        const canvasAreaToCapture = memeCanvasRef.current.querySelector('#meme-canvas-interactive-area');
         if (canvasAreaToCapture) {
             html2canvas(canvasAreaToCapture as HTMLElement, { 
               useCORS: true,
@@ -235,11 +236,9 @@ const App: React.FC = () => {
 
       setSelectedLayerId(layerId);
       const newZ = nextZIndex;
-      // updateLayer(layerId, { zIndex: newZ }); // updateLayer is async, direct map is better here for immediate effect
       const updatedOriginalLayer = { ...currentLayer, zIndex: newZ };
       setLayers(prev => prev.map(l => l.id === layerId ? updatedOriginalLayer : l));
       setNextZIndex(newZ + 1);
-
 
       const canvasRect = mainCanvasAreaRef.current.getBoundingClientRect();
       const isTouchEvent = 'touches' in event;
@@ -252,7 +251,7 @@ const App: React.FC = () => {
         interactionDetails.clickOffsetX = clientX - canvasRect.left - currentLayer.x;
         interactionDetails.clickOffsetY = clientY - canvasRect.top - currentLayer.y;
       } else if (interactionType === 'rotate') {
-        const layerElement = document.getElementById(`layer-render-${currentLayer.id}`); // LayerRenderer main div ID
+        const layerElement = document.getElementById(`layer-render-${currentLayer.id}`);
         const layerRect = layerElement?.getBoundingClientRect();
         if (!layerRect) return;
 
@@ -264,7 +263,6 @@ const App: React.FC = () => {
         );
         interactionDetails.originalLayerRotationRad = currentLayer.rotation * (Math.PI / 180);
       }
-      // For resize, initialMouseX/Y and originalLayer are enough for bottom-right handle
 
       setActiveInteraction({
         layerId,
@@ -282,7 +280,7 @@ const App: React.FC = () => {
   const handleInteractionMove = useCallback((event: MouseEvent | TouchEvent) => {
     if (!activeInteraction || !mainCanvasAreaRef.current) return;
     if (event.type === 'touchmove') {
-        event.preventDefault(); // Prevent scroll on touch
+        event.preventDefault();
     }
 
     const canvasRect = mainCanvasAreaRef.current.getBoundingClientRect();
@@ -296,11 +294,7 @@ const App: React.FC = () => {
       prevLayers.map((l) => {
         if (l.id !== activeInteraction.layerId) return l;
 
-        let newX = l.x;
-        let newY = l.y;
-        let newWidth = l.width;
-        let newHeight = l.height;
-        let newRotation = l.rotation;
+        let newX = l.x, newY = l.y, newWidth = l.width, newHeight = l.height, newRotation = l.rotation;
 
         if (interactionType === 'move') {
           newX = clientX - canvasRect.left - (activeInteraction.clickOffsetX || 0);
@@ -310,18 +304,14 @@ const App: React.FC = () => {
           const deltaY = clientY - initialMouseY;
 
           if (layerType === LayerType.STICKER && originalLayer.aspectRatio) {
-            // Resize maintaining aspect ratio (sticker) - from bottom right
-            // Prioritize width change and calculate height, or use diagonal logic
             newWidth = Math.max(MIN_LAYER_DIMENSION, (originalLayer.width || 0) + deltaX);
             newHeight = Math.max(MIN_LAYER_DIMENSION, newWidth / (originalLayer.aspectRatio || 1));
-            // If height driven by deltaY is proportionally larger, use that
             const heightFromDeltaY = Math.max(MIN_LAYER_DIMENSION, (originalLayer.height || 0) + deltaY);
             if (heightFromDeltaY / (originalLayer.aspectRatio || 1) > newWidth) {
                 newHeight = heightFromDeltaY;
                 newWidth = Math.max(MIN_LAYER_DIMENSION, newHeight * (originalLayer.aspectRatio || 1));
             }
-
-          } else { // Text layer or sticker without aspect ratio (fallback)
+          } else {
             newWidth = Math.max(MIN_LAYER_DIMENSION, (originalLayer.width || 0) + deltaX);
             newHeight = Math.max(MIN_LAYER_DIMENSION, (originalLayer.height || 0) + deltaY);
           }
@@ -362,29 +352,27 @@ const App: React.FC = () => {
   }, [activeInteraction, handleInteractionMove, handleInteractionEnd]);
   
   useEffect(() => {
-    // Dynamically load meme templates
     const loadTemplates = async () => {
       const templateModules = import.meta.glob('./public/templates/*.{png,jpg,jpeg,gif}', { eager: true, query: '?url', import: 'default' });
       const loadedTemplates: MemeTemplateOption[] = Object.entries(templateModules).map(([path, src], index) => {
         const name = path.split('/').pop()?.split('.')[0] || `Template ${index + 1}`;
         return {
           id: `template-${name}-${index}`,
-          name: name.replace(/[-_]/g, ' ').replace(/\b\w/g, l => l.toUpperCase()), // Basic formatting
-          src: src as string, // Explicitly cast to string
+          name: name.replace(/[-_]/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+          src: src as string,
           alt: name,
         };
       });
       setDynamicTemplates(loadedTemplates);
     };
 
-    // Dynamically load stickers
     const loadStickers = async () => {
       const stickerModules = import.meta.glob('./public/stickers/*.{png,jpg,jpeg,gif,svg}', { eager: true, query: '?url', import: 'default' });
       const loadedStickers: StickerOption[] = Object.entries(stickerModules).map(([path, src], index) => {
         const name = path.split('/').pop()?.split('.')[0] || `Sticker ${index + 1}`;
         return {
           id: `sticker-${name}-${index}`,
-          src: src as string, // Explicitly cast to string
+          src: src as string,
           alt: name,
         };
       });
@@ -395,18 +383,15 @@ const App: React.FC = () => {
     loadStickers();
 
     const handleClickOutside = (event: MouseEvent) => {
-      // Check if click is on canvas background (mainCanvasAreaRef) itself
       if (mainCanvasAreaRef.current && event.target === mainCanvasAreaRef.current) {
          setSelectedLayerId(null);
          return;
       }
 
-      // Check if click is outside canvas AND toolbar
       const toolbarElement = document.getElementById('toolbar');
       if (mainCanvasAreaRef.current && !mainCanvasAreaRef.current.contains(event.target as Node) &&
           (!toolbarElement || !toolbarElement.contains(event.target as Node))) {
-        // Further check it's not within a gallery modal
-        const galleryElement = document.querySelector('.fixed.inset-0.bg-black'); // Generic selector for modal backdrops
+        const galleryElement = document.querySelector('.fixed.inset-0.bg-black');
          if (!galleryElement || !galleryElement.contains(event.target as Node)){
             setSelectedLayerId(null);
         }
@@ -458,7 +443,7 @@ const App: React.FC = () => {
           onAddLayer={addNewLayer}
           selectedLayer={selectedLayer}
           onSelectLayer={setSelectedLayerId}
-          onUpdateLayer={updateLayer} // Still useful for direct property changes from editor
+          onUpdateLayer={updateLayer}
           onDeleteLayer={deleteLayer}
           onBringToFront={bringToFront}
           onSendToBack={sendToBack}
@@ -468,12 +453,13 @@ const App: React.FC = () => {
         <main ref={mainCanvasAreaRef} className="flex-1 p-2 sm:p-4 md:p-6 flex justify-center items-center overflow-auto bg-primary-bg relative">
           {baseImage ? (
             <MemeCanvas
-              ref={memeCanvasRef} // This ref is for the MemeCanvas component's wrapper div
+              ref={memeCanvasRef}
               baseImage={baseImage}
+              imageDimensions={imageDimensions}
               layers={layers}
               selectedLayerId={selectedLayerId}
               onSelectLayer={setSelectedLayerId}
-              onInteractionStart={handleInteractionStart} // Pass down interaction starter
+              onInteractionStart={handleInteractionStart}
             />
           ) : (
             <div className="text-center p-6 sm:p-10 border-2 border-dashed border-light-highlight rounded-lg max-w-md mx-auto">
