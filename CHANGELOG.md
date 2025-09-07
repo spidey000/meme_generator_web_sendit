@@ -17,6 +17,7 @@
 - Moved new files to the `lib` directory for better organization.
 - The "Download" button inside Telegram now uses the Web Share API for native sharing/saving.
 - The text layer dimensions now dynamically adjust to fit the text content, preventing cropping.
+- Implemented dynamic sizing for text and sticker layers to accommodate advanced effects (outline, glow, shadow) and prevent cropping in the final image.
 
 ### Fixed
 - The text outline is now correctly rendered behind the text fill.
