@@ -21,30 +21,84 @@ export const useTelegram = (): UseTelegramReturn => {
   const [user, setUser] = useState<TelegramUser | null>(null);
   const [isTelegramWebApp, setIsTelegramWebApp] = useState(false);
 
+  // Enhanced Telegram detection functions
+  const isTelegramWebView = useCallback(() => {
+    if (typeof window === 'undefined') return false;
+    
+    // Method 1: Check for Telegram WebApp API
+    if (window.Telegram?.WebApp) {
+      return true;
+    }
+    
+    // Method 2: Check user agent for Telegram mobile browsers
+    const userAgent = navigator.userAgent.toLowerCase();
+    const isTelegramUA = userAgent.includes('telegram') || 
+                         userAgent.includes('tgweb') ||
+                         userAgent.includes('t.me');
+    
+    // Method 3: Check if running in iframe (Telegram web apps run in iframes)
+    const isInIframe = window.parent !== window;
+    
+    // Method 4: Check for Telegram-specific referrer
+    const hasTelegramReferrer = document.referrer.includes('t.me') || 
+                              document.referrer.includes('telegram');
+    
+    // Method 5: Check for platform-specific indicators
+    const platform = navigator.platform.toLowerCase();
+    const isMobilePlatform = /android|iphone|ipad|ipod/.test(platform);
+    
+    // Only consider it Telegram if we have strong indicators
+    // Mobile browsers accessing t.me directly should NOT be treated as Telegram Web App
+    return (isTelegramUA && isInIframe) || 
+           (hasTelegramReferrer && isInIframe) ||
+           (window.Telegram?.WebApp !== undefined);
+  }, []);
+
   useEffect(() => {
     const initTelegram = () => {
-      if (typeof window !== 'undefined' && window.Telegram?.WebApp) {
-        const tg = window.Telegram.WebApp;
-        tg.ready();
-        tg.expand();
-        
-        setWebApp(tg);
-        setUser(tg.initDataUnsafe.user || null);
-        setIsTelegramWebApp(true);
-        
-        // Apply Telegram theme
-        applyTelegramTheme(tg);
-        
-        console.log('Telegram Web App initialized:', {
-          version: tg.version,
-          platform: tg.platform,
-          user: tg.initDataUnsafe.user
-        });
+      const isTelegram = isTelegramWebView();
+      
+      if (isTelegram) {
+        try {
+          const tg = window.Telegram?.WebApp;
+          
+          if (tg) {
+            tg.ready();
+            tg.expand();
+            
+            setWebApp(tg);
+            setUser(tg.initDataUnsafe.user || null);
+            setIsTelegramWebApp(true);
+            
+            // Apply Telegram theme
+            applyTelegramTheme(tg);
+            
+            console.log('Telegram Web App initialized:', {
+              version: tg.version,
+              platform: tg.platform,
+              user: tg.initDataUnsafe.user,
+              detectionMethod: 'WebApp API'
+            });
+          } else {
+            // If we detected Telegram context but no WebApp API,
+            // this might be a mobile browser viewing t.me directly
+            console.log('Telegram context detected but no WebApp API available');
+            setIsTelegramWebApp(false);
+          }
+        } catch (error) {
+          console.error('Error initializing Telegram Web App:', error);
+          setIsTelegramWebApp(false);
+        }
+      } else {
+        setIsTelegramWebApp(false);
       }
     };
 
-    initTelegram();
-  }, []);
+    // Add a small delay to ensure proper initialization
+    const timer = setTimeout(initTelegram, 100);
+    
+    return () => clearTimeout(timer);
+  }, [isTelegramWebView]);
 
   const applyTelegramTheme = useCallback((tg: TelegramWebApp) => {
     const theme = tg.themeParams;
