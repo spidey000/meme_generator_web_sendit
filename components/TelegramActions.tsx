@@ -1,3 +1,5 @@
+
+
 import React, { useCallback, useRef, useState } from 'react';
 import { useTelegram } from '@/lib/hooks/useTelegram';
 import { Button } from '@/components/common/Button';
@@ -17,7 +19,7 @@ export const TelegramActions: React.FC<TelegramActionsProps> = ({
     showAlert,
     getUserDisplayName
   } = useTelegram();
-  const [isSharing, setIsSharing] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
 
   const downloadLinkRef = useRef<HTMLAnchorElement>(null);
 
@@ -27,33 +29,7 @@ export const TelegramActions: React.FC<TelegramActionsProps> = ({
       return;
     }
 
-    try {
-      const html2canvas = (await import('html2canvas')).default;
-      const canvas = await html2canvas(memeCanvasRef.current, {
-        useCORS: true,
-        backgroundColor: '#0F0F0F',
-        scale: 2,
-      });
-      const image = canvas.toDataURL('image/jpeg', 0.9);
-      const link = downloadLinkRef.current;
-      if (link) {
-        link.href = image;
-        link.download = `sendit-meme-${Date.now()}.jpg`;
-        link.click();
-      }
-      showAlert('Meme downloaded! 📱');
-    } catch (error) {
-      console.error('Download failed:', error);
-      showAlert('Download failed. Please try again.');
-    }
-  }, [hasLayers, memeCanvasRef, showAlert]);
-
-  const handleTelegramShare = useCallback(async () => {
-    if (!hasLayers || !memeCanvasRef.current) {
-      showAlert('Please create a meme first!');
-      return;
-    }
-    setIsSharing(true);
+    setIsProcessing(true);
     try {
       const html2canvas = (await import('html2canvas')).default;
       const canvas = await html2canvas(memeCanvasRef.current, {
@@ -66,7 +42,60 @@ export const TelegramActions: React.FC<TelegramActionsProps> = ({
 
       if (!blob) {
         showAlert('Could not generate meme image.');
-        setIsSharing(false);
+        setIsProcessing(false);
+        return;
+      }
+
+      const file = new File([blob], 'meme.jpg', { type: 'image/jpeg' });
+      const shareData = {
+        files: [file],
+        title: 'Sendit Meme',
+      };
+
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share(shareData);
+      } else {
+        // Fallback for browsers that don't support file sharing via Web Share API
+        // This will trigger a traditional download
+        const image = canvas.toDataURL('image/jpeg', 0.9);
+        const link = downloadLinkRef.current;
+        if (link) {
+          link.href = image;
+          link.download = `sendit-meme-${Date.now()}.jpg`;
+          link.click();
+        }
+        showAlert('Meme downloaded! 📱');
+      }
+
+    } catch (error: any) {
+      if (error.name !== 'AbortError') {
+        console.error('Download failed:', error);
+        showAlert('Download failed. Please try again.');
+      }
+    } finally {
+        setIsProcessing(false);
+    }
+  }, [hasLayers, memeCanvasRef, showAlert]);
+
+  const handleTelegramShare = useCallback(async () => {
+    if (!hasLayers || !memeCanvasRef.current) {
+      showAlert('Please create a meme first!');
+      return;
+    }
+    setIsProcessing(true);
+    try {
+      const html2canvas = (await import('html2canvas')).default;
+      const canvas = await html2canvas(memeCanvasRef.current, {
+        useCORS: true,
+        backgroundColor: '#0F0F0F',
+        scale: 2,
+      });
+      
+      const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.9));
+
+      if (!blob) {
+        showAlert('Could not generate meme image.');
+        setIsProcessing(false);
         return;
       }
 
@@ -90,7 +119,7 @@ export const TelegramActions: React.FC<TelegramActionsProps> = ({
         showAlert('Share failed. Please try again.');
       }
     } finally {
-        setIsSharing(false);
+        setIsProcessing(false);
     }
   }, [hasLayers, memeCanvasRef, showAlert, getUserDisplayName]);
 
@@ -111,7 +140,7 @@ export const TelegramActions: React.FC<TelegramActionsProps> = ({
         <div className="actions">
             <Button
               onClick={handleDownload}
-              disabled={!hasLayers || isSharing}
+              disabled={!hasLayers || isProcessing}
               className="action-button"
             >
               <Icon path="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
@@ -119,15 +148,15 @@ export const TelegramActions: React.FC<TelegramActionsProps> = ({
             </Button>
             <Button
               onClick={handleTelegramShare}
-              disabled={!hasLayers || isSharing}
+              disabled={!hasLayers || isProcessing}
               className="action-button action-button--primary"
             >
-              {isSharing ? (
+              {isProcessing ? (
                   <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
               ) : (
                 <Icon path="M7.217 10.907a2.25 2.25 0 1 0 0 2.186m0-2.186c.18.324.283.696.283 1.093s-.103.77-.283 1.093m0-2.186 9.566-5.314m-9.566 7.5 9.566 5.314m0 0a2.25 2.25 0 1 0 3.935 2.186 2.25 2.25 0 0 0-3.935-2.186Zm0-12.814a2.25 2.25 0 1 0 3.933-2.185 2.25 2.25 0 0 0-3.933 2.185Z" />
               )}
-              <span>{isSharing ? 'Sharing...' : 'Share'}</span>
+              <span>{isProcessing ? 'Sharing...' : 'Share'}</span>
             </Button>
         </div>
       </div>
