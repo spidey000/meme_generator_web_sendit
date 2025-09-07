@@ -1,5 +1,3 @@
-
-
 import React, { useCallback, useRef, useState } from 'react';
 import { useTelegram } from '@/lib/hooks/useTelegram';
 import { Button } from '@/components/common/Button';
@@ -17,7 +15,6 @@ export const TelegramActions: React.FC<TelegramActionsProps> = ({
   const {
     isTelegramWebApp,
     showAlert,
-    openTelegramShare,
     getUserDisplayName
   } = useTelegram();
   const [isSharing, setIsSharing] = useState(false);
@@ -64,34 +61,38 @@ export const TelegramActions: React.FC<TelegramActionsProps> = ({
         backgroundColor: '#0F0F0F',
         scale: 2,
       });
-      const imageData = canvas.toDataURL('image/jpeg', 0.9);
+      
+      const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.9));
 
-      const response = await fetch('/api/upload', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ imageData }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to upload image');
+      if (!blob) {
+        showAlert('Could not generate meme image.');
+        setIsSharing(false);
+        return;
       }
 
-      const { url } = await response.json();
-
+      const file = new File([blob], 'meme.jpg', { type: 'image/jpeg' });
       const userDisplayName = getUserDisplayName();
-      const shareText = `🎨 Check out this awesome meme I created!\n\nMade by ${userDisplayName} with Sendit Meme Generator`;
-      
-      openTelegramShare(shareText, url);
+      const shareData = {
+        files: [file],
+        title: 'Sendit Meme',
+        text: `Check out this meme I made with Sendit Meme Generator!\n\nCreated by: ${userDisplayName}`,
+      };
 
-    } catch (error) {
-      console.error('Share failed:', error);
-      showAlert('Share failed. Please try again.');
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share(shareData);
+      } else {
+        showAlert('Your browser does not support sharing files directly. Please download the image and share it manually.');
+      }
+
+    } catch (error: any) {
+      if (error.name !== 'AbortError') {
+        console.error('Share failed:', error);
+        showAlert('Share failed. Please try again.');
+      }
     } finally {
         setIsSharing(false);
     }
-  }, [hasLayers, memeCanvasRef, showAlert, getUserDisplayName, openTelegramShare]);
+  }, [hasLayers, memeCanvasRef, showAlert, getUserDisplayName]);
 
   if (!isTelegramWebApp) {
     return null;
@@ -124,7 +125,7 @@ export const TelegramActions: React.FC<TelegramActionsProps> = ({
               {isSharing ? (
                   <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
               ) : (
-                <Icon path="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7Z" />
+                <Icon path="M7.217 10.907a2.25 2.25 0 1 0 0 2.186m0-2.186c.18.324.283.696.283 1.093s-.103.77-.283 1.093m0-2.186 9.566-5.314m-9.566 7.5 9.566 5.314m0 0a2.25 2.25 0 1 0 3.935 2.186 2.25 2.25 0 0 0-3.935-2.186Zm0-12.814a2.25 2.25 0 1 0 3.933-2.185 2.25 2.25 0 0 0-3.933 2.185Z" />
               )}
               <span>{isSharing ? 'Sharing...' : 'Share'}</span>
             </Button>
