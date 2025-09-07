@@ -501,29 +501,19 @@ const App: React.FC = () => {
               </div>
             </div>
           )}
-           {isTelegramWebApp && (
-              <div className="mt-6">
-                <TelegramActions
-                  memeCanvasRef={memeCanvasRef}
-                  hasLayers={hasContent}
-                  className="lg:hidden" // Show on mobile
-                />
-              </div>
-            )}
         </main>
-         {isTelegramWebApp && (
-              <TelegramActions
-                memeCanvasRef={memeCanvasRef}
-                hasLayers={hasContent}
-                className="hidden lg:block"
-              />
-            )}
       </div>
       {showMemeTemplateGallery && (
         <MemeTemplateGallery 
           templates={dynamicTemplates}
           onSelectTemplate={handleSelectMemeTemplate}
           onClose={() => setShowMemeTemplateGallery(false)}
+        />
+      )}
+      {isTelegramWebApp && (
+        <TelegramActions
+          memeCanvasRef={memeCanvasRef}
+          hasLayers={hasContent}
         />
       )}
     </div>

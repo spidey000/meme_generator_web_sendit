@@ -66,6 +66,7 @@ const LayerRenderer: React.FC<LayerRendererProps> = ({ layer, isSelected, onSele
         fontSize: `${textLayer.fontSize}px`,
         color: textLayer.color,
         WebkitTextStroke: `${textLayer.outlineWidth}px ${textLayer.outlineColor}`,
+        paintOrder: 'stroke fill',
         textShadow: `${textLayer.shadowOffsetX}px ${textLayer.shadowOffsetY}px ${textLayer.shadowBlur}px ${textLayer.shadowColor}`,
         whiteSpace: 'pre-wrap', // Changed from pre to pre-wrap for better fitting
         wordBreak: 'break-word',

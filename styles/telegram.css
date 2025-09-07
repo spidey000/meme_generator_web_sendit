@@ -1,10 +1,9 @@
-
-
 /* Telegram Web App specific styles */
 .telegram-webapp {
-  /* Use Telegram theme colors when available */
   background-color: var(--tg-bg-color, #0F0F0F);
   color: var(--tg-text-color, #FFFFFF);
+  /* Make space for the bottom banner */
+  padding-bottom: 80px;
 }
 
 .telegram-webapp .bg-gray-900 {
@@ -15,44 +14,85 @@
   color: var(--tg-text-color, #FFFFFF) !important;
 }
 
-.telegram-webapp .bg-green-500 {
-  background-color: var(--tg-button-color, #00FF7F) !important;
+/* Banner Styles */
+.telegram-actions-banner {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background-color: var(--tg-secondary-bg-color, #181818);
+  border-top: 1px solid var(--tg-hint-color, #333);
+  padding: 10px 16px;
+  z-index: 1000;
+  box-shadow: 0 -2px 10px rgba(0,0,0,0.3);
 }
 
-/* Enhanced mobile experience for Telegram */
-@media (max-width: 768px) {
-  .telegram-webapp .container {
-    padding-left: 1rem;
-    padding-right: 1rem;
-  }
-  
-  .telegram-webapp .flex-col.lg\\:flex-row {
-    gap: 1rem;
-  }
-  
-  /* Make buttons more touch-friendly */
-  .telegram-webapp button {
-    min-height: 44px;
-  }
-  
-  /* Improve canvas area for mobile */
-  .telegram-webapp [data-canvas-container] {
-    max-width: 100%;
-    overflow-x: auto;
-  }
+.telegram-actions-banner__content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  max-width: 900px;
+  margin: 0 auto;
 }
 
-/* Telegram action buttons styling */
-.telegram-actions button {
-  transition: all 0.2s ease;
+.user-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
-.telegram-actions button:hover {
-  transform: translateY(-2px);
+.user-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background-color: var(--tg-button-color, #00FF7F);
+  color: var(--tg-button-text-color, #000000);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  font-size: 18px;
 }
 
-.telegram-actions button:active {
-  transform: translateY(0);
+.user-name {
+  font-weight: 600;
+  color: var(--tg-text-color, #FFFFFF);
+}
+
+.actions {
+  display: flex;
+  gap: 10px;
+}
+
+.action-button {
+  background-color: var(--tg-button-color, #239fde);
+  color: var(--tg-button-text-color, #ffffff);
+  border-radius: 8px;
+  padding: 10px 16px;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: background-color 0.2s ease;
+}
+
+.action-button:hover {
+  background-color: #35a9e0; /* Fallback hover color */
+}
+
+.action-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.action-button--primary {
+    background-color: var(--tg-button-color, #007bff);
+}
+
+.action-button--primary:hover {
+    background-color: #0069d9;
 }
 
 /* Loading states */
@@ -60,4 +100,3 @@
   opacity: 0.6;
   pointer-events: none;
 }
-
