@@ -7,6 +7,7 @@
 - `useTelegram` hook to interact with the Telegram Web App API.
 - `TelegramActions` component for Telegram-specific actions.
 - Telegram-specific styles.
+- `measureText` utility for dynamic text dimension calculation.
 
 ### Changed
 - Sharing in Telegram now uses the Web Share API to send the image file directly, instead of a link.
@@ -14,10 +15,13 @@
 - Updated `App.tsx` to integrate Telegram functionality.
 - Updated `index.html` to include the Telegram Web App SDK.
 - Moved new files to the `lib` directory for better organization.
+- The "Download" button inside Telegram now uses the Web Share API for native sharing/saving.
+- The text layer dimensions now dynamically adjust to fit the text content, preventing cropping.
 
 ### Fixed
 - The text outline is now correctly rendered behind the text fill.
 - The canvas area now resizes to the full dimensions of the base image, preventing the image from being cropped in the UI and in downloaded/shared files.
+- Ensured all Telegram-specific UI elements are correctly hidden when not in Telegram's browser.
 
 ### Removed
 - Removed the "Send to Channel" button from the Telegram actions.
