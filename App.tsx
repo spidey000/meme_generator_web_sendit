@@ -276,7 +276,7 @@ const App: React.FC = () => {
             }).then(canvas => {
               const image = canvas.toDataURL('image/jpeg', 0.9);
               const link = document.createElement('a');
-              link.download = `sendit-fun-${Date.now()}.jpg`;
+              link.download = `sendit-memegen-${Date.now()}.jpg`;
               link.href = image;
               link.click();
             }).catch(err => {
@@ -566,7 +566,7 @@ const App: React.FC = () => {
   return (
     <div className={`flex flex-col h-screen bg-primary-bg text-text-white font-sans ${isTelegramWebApp ? 'telegram-webapp' : ''}`}>
       <header className="p-3 sm:p-4 bg-brand-black shadow-md flex justify-between items-center border-b-2 border-accent-green">
-        <h1 className="text-2xl sm:text-3xl font-bold text-accent-green">SENDIT.MEME{isTelegramWebApp && <span className="ml-2 text-sm">📱 Telegram</span>}</h1>
+        <h1 className="text-2xl sm:text-3xl font-bold text-accent-green">sendit memegen{isTelegramWebApp && <span className="ml-2 text-sm">📱 Telegram</span>}</h1>
         <div className="flex items-center space-x-2 sm:space-x-3">
           <button
             onClick={() => setShowMemeTemplateGallery(true)}

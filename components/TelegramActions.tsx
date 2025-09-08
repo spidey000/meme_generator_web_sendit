@@ -68,14 +68,14 @@ export const TelegramActions: React.FC<TelegramActionsProps> = ({
       const link = downloadLinkRef.current;
       if (link) {
         link.href = image;
-        link.download = `sendit-meme-${Date.now()}.jpg`;
+        link.download = `sendit-memegen-${Date.now()}.jpg`;
         link.click();
         showAlert('Meme downloaded to your device! 📁');
       } else {
         // Fallback: create a temporary link element
         const tempLink = document.createElement('a');
         tempLink.href = image;
-        tempLink.download = `sendit-meme-${Date.now()}.jpg`;
+        tempLink.download = `sendit-memegen-${Date.now()}.jpg`;
         tempLink.style.display = 'none';
         document.body.appendChild(tempLink);
         tempLink.click();
@@ -233,8 +233,8 @@ export const TelegramActions: React.FC<TelegramActionsProps> = ({
       const userDisplayName = getUserDisplayName();
       const shareData = {
         files: [file],
-        title: 'Sendit Meme',
-        text: `Check out this meme I made with Sendit Meme Generator!\n\nCreated by: ${userDisplayName}`,
+        title: 'sendit memegen',
+        text: `Check out this meme I made with sendit memegen!\n\nCreated by: ${userDisplayName}`,
       };
 
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
