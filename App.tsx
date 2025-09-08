@@ -10,12 +10,6 @@ import { TelegramActions } from '@/components/TelegramActions';
 import measureText from '@/lib/utils/textMeasurement';
 import './styles/telegram.css';
 
-// Constants for effect padding
-const TEXT_EFFECTS_HORIZONTAL_PADDING = 40; // Example: 20px left + 20px right for shadows/glows/outlines
-const TEXT_EFFECTS_VERTICAL_PADDING = 40;   // Example: 20px top + 20px bottom
-
-const STICKER_EFFECTS_HORIZONTAL_PADDING = 40; // Similar for stickers
-const STICKER_EFFECTS_VERTICAL_PADDING = 40;
 
 const App: React.FC = () => {
   const [baseImage, setBaseImage] = useState<string | null>(null);
@@ -260,18 +254,6 @@ const App: React.FC = () => {
                 // Hide interaction handles and outlines
                 documentClone.querySelectorAll('.interaction-handle').forEach(el => (el as HTMLElement).style.display = 'none');
                 documentClone.querySelectorAll('.layer-selected-outline').forEach(el => (el as HTMLElement).style.border = 'none');
-                
-                // Process sticker effects for html2canvas compatibility
-                documentClone.querySelectorAll('img[data-is-sticker="true"]').forEach(img => {
-                  const imgElement = img as HTMLImageElement;
-                  const computedStyle = window.getComputedStyle(imgElement);
-                  const filter = computedStyle.filter;
-                  
-                  // If filter exists and contains drop-shadow, create a canvas version
-                  if (filter && filter.includes('drop-shadow')) {
-                    renderStickerWithEffects(imgElement, filter);
-                  }
-                });
               }
             }).then(canvas => {
               const image = canvas.toDataURL('image/jpeg', 0.9);
@@ -290,103 +272,7 @@ const App: React.FC = () => {
     });
   };
 
-  // Helper function to render sticker effects on canvas for html2canvas compatibility
-  const renderStickerWithEffects = (imgElement: HTMLImageElement, filter: string) => {
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    // Set canvas size to match image
-    canvas.width = imgElement.naturalWidth || imgElement.width;
-    canvas.height = imgElement.naturalHeight || imgElement.height;
-
-    // Parse all filter effects
-    const dropShadows = parseDropShadows(filter);
-    
-    // Create temporary image for drawing
-    const tempImg = new Image();
-    tempImg.crossOrigin = 'anonymous';
-    tempImg.onload = () => {
-      // Clear canvas
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      
-      // Apply glow effects first (as background layers)
-      const glowShadows = dropShadows.filter(shadow => 
-        shadow.offsetX === 0 && shadow.offsetY === 0 && shadow.blur > 0
-      );
-      
-      glowShadows.forEach(shadow => {
-        ctx.save();
-        ctx.globalCompositeOperation = 'screen';
-        ctx.shadowColor = shadow.color;
-        ctx.shadowBlur = shadow.blur;
-        ctx.shadowOffsetX = 0;
-        ctx.shadowOffsetY = 0;
-        ctx.drawImage(tempImg, 0, 0, canvas.width, canvas.height);
-        ctx.restore();
-      });
-      
-      // Apply outline effects (multiple offset shadows)
-      const outlineShadows = dropShadows.filter(shadow => 
-        (shadow.offsetX !== 0 || shadow.offsetY !== 0) && shadow.blur === 0
-      );
-      
-      outlineShadows.forEach(shadow => {
-        ctx.shadowColor = shadow.color;
-        ctx.shadowBlur = shadow.blur;
-        ctx.shadowOffsetX = shadow.offsetX;
-        ctx.shadowOffsetY = shadow.offsetY;
-        ctx.drawImage(tempImg, 0, 0, canvas.width, canvas.height);
-      });
-      
-      // Apply shadow effects (offset + blur)
-      const regularShadows = dropShadows.filter(shadow => 
-        (shadow.offsetX !== 0 || shadow.offsetY !== 0) && shadow.blur > 0
-      );
-      
-      regularShadows.forEach(shadow => {
-        ctx.shadowColor = shadow.color;
-        ctx.shadowBlur = shadow.blur;
-        ctx.shadowOffsetX = shadow.offsetX;
-        ctx.shadowOffsetY = shadow.offsetY;
-        ctx.drawImage(tempImg, 0, 0, canvas.width, canvas.height);
-      });
-      
-      // Draw final image on top without effects
-      ctx.shadowColor = 'transparent';
-      ctx.shadowBlur = 0;
-      ctx.shadowOffsetX = 0;
-      ctx.shadowOffsetY = 0;
-      ctx.globalCompositeOperation = 'source-over';
-      ctx.drawImage(tempImg, 0, 0, canvas.width, canvas.height);
-      
-      // Replace original image with canvas
-      imgElement.parentNode?.replaceChild(canvas, imgElement);
-    };
-    tempImg.src = imgElement.src;
-  };
-
-  // Parse CSS drop-shadow filter into individual shadow objects
-  const parseDropShadows = (filter: string) => {
-    const shadows: Array<{offsetX: number, offsetY: number, blur: number, color: string}> = [];
-    const dropShadowRegex = /drop-shadow\(([^)]+)\)/g;
-    let match;
-    
-    while ((match = dropShadowRegex.exec(filter)) !== null) {
-      const shadowParams = match[1].trim().split(/\s+/);
-      if (shadowParams.length >= 3) {
-        const offsetX = parseFloat(shadowParams[0]);
-        const offsetY = parseFloat(shadowParams[1]);
-        const blur = parseFloat(shadowParams[2]);
-        const color = shadowParams.slice(3).join(' ') || '#000000';
-        
-        shadows.push({ offsetX, offsetY, blur, color });
-      }
-    }
-    
-    return shadows;
-  };
-
+  
   const handleInteractionStart = useCallback(
     (layerId: string, interactionType: InteractionType, event: React.MouseEvent<HTMLElement> | React.TouchEvent<HTMLElement>, layerType: LayerType) => {
       event.stopPropagation();

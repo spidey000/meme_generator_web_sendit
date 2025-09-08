@@ -22,14 +22,6 @@ export interface TextLayerProps extends CommonLayerProps {
   fontFamily: string;
   fontSize: number;
   color: string;
-  outlineColor: string;
-  outlineWidth: number;
-  shadowColor: string;
-  shadowBlur: number;
-  shadowOffsetX: number;
-  shadowOffsetY: number;
-  glowColor: string;
-  glowStrength: number;
 }
 
 export interface StickerLayerProps extends CommonLayerProps {
@@ -37,14 +29,6 @@ export interface StickerLayerProps extends CommonLayerProps {
   src: string;
   alt: string;
   aspectRatio: number; // Stickers will always have an aspect ratio
-  outlineColor?: string;
-  outlineWidth?: number;
-  shadowColor?: string;
-  shadowBlur?: number;
-  shadowOffsetX?: number;
-  shadowOffsetY?: number;
-  glowColor?: string;
-  glowStrength?: number;
 }
 
 export type Layer = TextLayerProps | StickerLayerProps;
