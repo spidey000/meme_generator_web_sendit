@@ -300,7 +300,7 @@ const App: React.FC = () => {
     canvas.width = imgElement.naturalWidth || imgElement.width;
     canvas.height = imgElement.naturalHeight || imgElement.height;
 
-    // Parse filter effects
+    // Parse all filter effects
     const dropShadows = parseDropShadows(filter);
     
     // Create temporary image for drawing
@@ -310,8 +310,28 @@ const App: React.FC = () => {
       // Clear canvas
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       
-      // Apply drop shadows (draw multiple times with offsets)
-      dropShadows.forEach(shadow => {
+      // Apply glow effects first (as background layers)
+      const glowShadows = dropShadows.filter(shadow => 
+        shadow.offsetX === 0 && shadow.offsetY === 0 && shadow.blur > 0
+      );
+      
+      glowShadows.forEach(shadow => {
+        ctx.save();
+        ctx.globalCompositeOperation = 'screen';
+        ctx.shadowColor = shadow.color;
+        ctx.shadowBlur = shadow.blur;
+        ctx.shadowOffsetX = 0;
+        ctx.shadowOffsetY = 0;
+        ctx.drawImage(tempImg, 0, 0, canvas.width, canvas.height);
+        ctx.restore();
+      });
+      
+      // Apply outline effects (multiple offset shadows)
+      const outlineShadows = dropShadows.filter(shadow => 
+        (shadow.offsetX !== 0 || shadow.offsetY !== 0) && shadow.blur === 0
+      );
+      
+      outlineShadows.forEach(shadow => {
         ctx.shadowColor = shadow.color;
         ctx.shadowBlur = shadow.blur;
         ctx.shadowOffsetX = shadow.offsetX;
@@ -319,11 +339,25 @@ const App: React.FC = () => {
         ctx.drawImage(tempImg, 0, 0, canvas.width, canvas.height);
       });
       
-      // Draw final image without shadow
+      // Apply shadow effects (offset + blur)
+      const regularShadows = dropShadows.filter(shadow => 
+        (shadow.offsetX !== 0 || shadow.offsetY !== 0) && shadow.blur > 0
+      );
+      
+      regularShadows.forEach(shadow => {
+        ctx.shadowColor = shadow.color;
+        ctx.shadowBlur = shadow.blur;
+        ctx.shadowOffsetX = shadow.offsetX;
+        ctx.shadowOffsetY = shadow.offsetY;
+        ctx.drawImage(tempImg, 0, 0, canvas.width, canvas.height);
+      });
+      
+      // Draw final image on top without effects
       ctx.shadowColor = 'transparent';
       ctx.shadowBlur = 0;
       ctx.shadowOffsetX = 0;
       ctx.shadowOffsetY = 0;
+      ctx.globalCompositeOperation = 'source-over';
       ctx.drawImage(tempImg, 0, 0, canvas.width, canvas.height);
       
       // Replace original image with canvas

@@ -63,25 +63,24 @@ export const TelegramActions: React.FC<TelegramActionsProps> = ({
         return;
       }
 
-      const file = new File([blob], 'meme.jpg', { type: 'image/jpeg' });
-      const shareData = {
-        files: [file],
-        title: 'Sendit Meme',
-      };
-
-      if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        await navigator.share(shareData);
+      // Force local file download instead of using Web Share API
+      const image = canvas.toDataURL('image/jpeg', 0.9);
+      const link = downloadLinkRef.current;
+      if (link) {
+        link.href = image;
+        link.download = `sendit-meme-${Date.now()}.jpg`;
+        link.click();
+        showAlert('Meme downloaded to your device! 📁');
       } else {
-        // Fallback for browsers that don't support file sharing via Web Share API
-        // This will trigger a traditional download
-        const image = canvas.toDataURL('image/jpeg', 0.9);
-        const link = downloadLinkRef.current;
-        if (link) {
-          link.href = image;
-          link.download = `sendit-meme-${Date.now()}.jpg`;
-          link.click();
-        }
-        showAlert('Meme downloaded! 📱');
+        // Fallback: create a temporary link element
+        const tempLink = document.createElement('a');
+        tempLink.href = image;
+        tempLink.download = `sendit-meme-${Date.now()}.jpg`;
+        tempLink.style.display = 'none';
+        document.body.appendChild(tempLink);
+        tempLink.click();
+        document.body.removeChild(tempLink);
+        showAlert('Meme downloaded to your device! 📁');
       }
 
     } catch (error: any) {
@@ -104,7 +103,7 @@ export const TelegramActions: React.FC<TelegramActionsProps> = ({
     canvas.width = imgElement.naturalWidth || imgElement.width;
     canvas.height = imgElement.naturalHeight || imgElement.height;
 
-    // Parse filter effects
+    // Parse all filter effects
     const dropShadows = parseDropShadows(filter);
     
     // Create temporary image for drawing
@@ -114,8 +113,28 @@ export const TelegramActions: React.FC<TelegramActionsProps> = ({
       // Clear canvas
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       
-      // Apply drop shadows (draw multiple times with offsets)
-      dropShadows.forEach(shadow => {
+      // Apply glow effects first (as background layers)
+      const glowShadows = dropShadows.filter(shadow => 
+        shadow.offsetX === 0 && shadow.offsetY === 0 && shadow.blur > 0
+      );
+      
+      glowShadows.forEach(shadow => {
+        ctx.save();
+        ctx.globalCompositeOperation = 'screen';
+        ctx.shadowColor = shadow.color;
+        ctx.shadowBlur = shadow.blur;
+        ctx.shadowOffsetX = 0;
+        ctx.shadowOffsetY = 0;
+        ctx.drawImage(tempImg, 0, 0, canvas.width, canvas.height);
+        ctx.restore();
+      });
+      
+      // Apply outline effects (multiple offset shadows)
+      const outlineShadows = dropShadows.filter(shadow => 
+        (shadow.offsetX !== 0 || shadow.offsetY !== 0) && shadow.blur === 0
+      );
+      
+      outlineShadows.forEach(shadow => {
         ctx.shadowColor = shadow.color;
         ctx.shadowBlur = shadow.blur;
         ctx.shadowOffsetX = shadow.offsetX;
@@ -123,11 +142,25 @@ export const TelegramActions: React.FC<TelegramActionsProps> = ({
         ctx.drawImage(tempImg, 0, 0, canvas.width, canvas.height);
       });
       
-      // Draw final image without shadow
+      // Apply shadow effects (offset + blur)
+      const regularShadows = dropShadows.filter(shadow => 
+        (shadow.offsetX !== 0 || shadow.offsetY !== 0) && shadow.blur > 0
+      );
+      
+      regularShadows.forEach(shadow => {
+        ctx.shadowColor = shadow.color;
+        ctx.shadowBlur = shadow.blur;
+        ctx.shadowOffsetX = shadow.offsetX;
+        ctx.shadowOffsetY = shadow.offsetY;
+        ctx.drawImage(tempImg, 0, 0, canvas.width, canvas.height);
+      });
+      
+      // Draw final image on top without effects
       ctx.shadowColor = 'transparent';
       ctx.shadowBlur = 0;
       ctx.shadowOffsetX = 0;
       ctx.shadowOffsetY = 0;
+      ctx.globalCompositeOperation = 'source-over';
       ctx.drawImage(tempImg, 0, 0, canvas.width, canvas.height);
       
       // Replace original image with canvas
@@ -241,7 +274,7 @@ export const TelegramActions: React.FC<TelegramActionsProps> = ({
               className="action-button"
             >
               <Icon path="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
-              <span>Download</span>
+              <span>Save to Device</span>
             </Button>
             <Button
               onClick={handleTelegramShare}
