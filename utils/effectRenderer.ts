@@ -197,12 +197,42 @@ class CanvasEffectRenderer {
     config: CanvasEffectConfig,
     scale: number
   ): Promise<void> {
+    // Guard: nothing to do
     if (!config.outlineWidth || config.outlineWidth <= 0 || !config.outlineColor) return;
 
     const outlineWidth = config.outlineWidth * scale;
     const outlineColor = config.outlineColor;
 
-    // Draw outline in 8 directions (pseudo-outline)
+    // Build a tinted alpha silhouette once on an offscreen canvas, then draw only the silhouette at offsets.
+    // This avoids duplicating the full-color sticker content (root cause of "ghost" duplicates).
+    const silhouetteCanvas = document.createElement('canvas');
+    silhouetteCanvas.width = Math.max(1, Math.floor(width));
+    silhouetteCanvas.height = Math.max(1, Math.floor(height));
+    const sctx = silhouetteCanvas.getContext('2d');
+    if (sctx) {
+      // Reset and clear offscreen context to avoid residual state across frames
+      sctx.setTransform(1, 0, 0, 1, 0, 0);
+      sctx.globalAlpha = 1;
+      sctx.globalCompositeOperation = 'source-over';
+      sctx.shadowColor = 'transparent';
+      sctx.shadowBlur = 0;
+      sctx.shadowOffsetX = 0;
+      sctx.shadowOffsetY = 0;
+      sctx.clearRect(0, 0, silhouetteCanvas.width, silhouetteCanvas.height);
+
+      // Draw the base image to establish alpha
+      sctx.drawImage(image, 0, 0, width, height);
+
+      // Color the alpha mask with the outline color
+      sctx.globalCompositeOperation = 'source-in';
+      sctx.fillStyle = outlineColor!;
+      sctx.fillRect(0, 0, silhouetteCanvas.width, silhouetteCanvas.height);
+
+      // Reset composite for safety (not strictly necessary since we won't reuse sctx)
+      sctx.globalCompositeOperation = 'source-over';
+    }
+
+    // Offsets for an 8-direction pseudo-outline
     const offsets = [
       { x: outlineWidth, y: 0 },
       { x: -outlineWidth, y: 0 },
@@ -215,15 +245,20 @@ class CanvasEffectRenderer {
     ];
 
     ctx.save();
+    // Ensure clean state for the main context during outline
+    ctx.setTransform(ctx.getTransform()); // no-op but ensures API availability across browsers
+    ctx.globalAlpha = 1;
     ctx.globalCompositeOperation = 'source-over';
-
-    // Use tint by drawing with shadow to emulate solid outline behind transparent areas
-    ctx.fillStyle = outlineColor;
+    ctx.shadowColor = 'transparent';
+    ctx.shadowBlur = 0;
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 0;
 
     for (const offset of offsets) {
       ctx.save();
       ctx.translate(offset.x, offset.y);
-      ctx.drawImage(image, -width / 2, -height / 2, width, height);
+      // Draw only the silhouette, not the original full-color image
+      ctx.drawImage(silhouetteCanvas, -width / 2, -height / 2, width, height);
       ctx.restore();
     }
 
@@ -314,6 +349,41 @@ class CanvasEffectRenderer {
 }
 
 /**
+ * Build a tinted silhouette (alpha mask colored with a solid) from an image.
+ * The resulting canvas contains only the alpha of the source, filled uniformly with 'color'.
+ * We clear and reset state on the offscreen context to avoid residual state across frames.
+ */
+function createTintedSilhouette(
+  image: HTMLImageElement | HTMLCanvasElement,
+  width: number,
+  height: number,
+  color: string
+): HTMLCanvasElement {
+  const off = document.createElement('canvas');
+  off.width = Math.max(1, Math.floor(width));
+  off.height = Math.max(1, Math.floor(height));
+  const octx = off.getContext('2d')!;
+  // Reset/clear
+  octx.setTransform(1, 0, 0, 1, 0, 0);
+  octx.globalAlpha = 1;
+  octx.globalCompositeOperation = 'source-over';
+  octx.shadowColor = 'transparent';
+  octx.shadowBlur = 0;
+  octx.shadowOffsetX = 0;
+  octx.shadowOffsetY = 0;
+  octx.clearRect(0, 0, off.width, off.height);
+  // Establish alpha
+  octx.drawImage(image, 0, 0, width, height);
+  // Color the alpha mask
+  octx.globalCompositeOperation = 'source-in';
+  octx.fillStyle = color;
+  octx.fillRect(0, 0, off.width, off.height);
+  // Return with composite reset (not reused anyway)
+  octx.globalCompositeOperation = 'source-over';
+  return off;
+}
+
+/**
  * Exported helper for shared pipeline: render sticker effects only.
  * Caller is responsible for final drawImage(image, 0, 0, width, height).
  * The ctx should already be transformed to the sticker's local space.
@@ -329,7 +399,9 @@ export function renderStickerEffects(
   // Outline (8-direction pseudo-outline)
   if (config.outlineWidth && config.outlineWidth > 0 && config.outlineColor) {
     const w = (config.outlineWidth || 0) * scale;
-    const c = config.outlineColor;
+    const c = config.outlineColor!;
+    // Build a tinted silhouette once; draw only the silhouette at offsets to avoid duplicating the image content.
+    const silhouette = createTintedSilhouette(image as HTMLImageElement, width, height, c);
     const offsets = [
       { x: w, y: 0 },
       { x: -w, y: 0 },
@@ -341,12 +413,18 @@ export function renderStickerEffects(
       { x: -w * 0.707, y: -w * 0.707 },
     ];
     ctx.save();
+    // Ensure clean state
+    ctx.globalAlpha = 1;
     ctx.globalCompositeOperation = 'source-over';
-    // Draw offset images to simulate outline
+    ctx.shadowColor = 'transparent';
+    ctx.shadowBlur = 0;
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 0;
+
     for (const o of offsets) {
       ctx.save();
       ctx.translate(o.x, o.y);
-      ctx.drawImage(image, 0, 0, width, height);
+      ctx.drawImage(silhouette, 0, 0, width, height);
       ctx.restore();
     }
     ctx.restore();
