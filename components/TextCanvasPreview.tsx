@@ -32,7 +32,10 @@ const TextCanvasPreview: React.FC<TextCanvasPreviewProps> = ({
     ctx.clearRect(0, 0, width, height);
 
     // Draw text via shared pipeline (scale-aware)
-    drawTextLayer(ctx, layer, effectiveScale).catch((err) => {
+    // Important: zero out global transforms for preview-only rendering,
+    // since the DOM container already applies left/top + rotation.
+    const localLayer: TextLayerProps = { ...layer, x: 0, y: 0, rotation: 0 };
+    drawTextLayer(ctx, localLayer, effectiveScale).catch((err) => {
       // eslint-disable-next-line no-console
       console.error('Text canvas rendering failed', err);
     });

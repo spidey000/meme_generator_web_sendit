@@ -75,7 +75,10 @@ const CanvasEffectRenderer: React.FC<CanvasEffectRendererProps> = ({
     ctx.clearRect(0, 0, width, height);
 
     // Draw sticker with effects via shared pipeline
-    drawStickerLayer(ctx, layer, imageRef.current, effectiveScale)
+    // Important: zero out global transforms for preview-only rendering,
+    // since the DOM container already applies left/top + rotation.
+    const localLayer = { ...layer, x: 0, y: 0, rotation: 0 };
+    drawStickerLayer(ctx, localLayer, imageRef.current, effectiveScale)
       .catch(err => {
         setError('Canvas rendering failed');
         console.error('Canvas rendering error:', err);
