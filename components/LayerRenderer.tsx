@@ -1,9 +1,11 @@
 // Fix: Re-trigger TypeScript language server
 
-import React from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import { Layer, TextLayerProps, StickerLayerProps, LayerType, InteractionType } from '../types';
 import { BRAND_COLORS, HANDLE_SIZE, HANDLE_OFFSET } from '../constants';
 import { Icon } from './common/Icon';
+import CanvasEffectRenderer from './CanvasEffectRenderer';
+import { StickerEffectManager } from '../utils/effectRenderer';
 
 interface LayerRendererProps {
   layer: Layer;
@@ -15,10 +17,28 @@ interface LayerRendererProps {
     event: React.MouseEvent<HTMLElement> | React.TouchEvent<HTMLElement>,
     layerType: LayerType
   ) => void;
+  useCanvasForExport?: boolean; // New prop to control rendering mode
 }
 
-const LayerRenderer: React.FC<LayerRendererProps> = ({ layer, isSelected, onSelect, onInteractionStart }) => {
+const LayerRenderer: React.FC<LayerRendererProps> = ({ layer, isSelected, onSelect, onInteractionStart, useCanvasForExport = false }) => {
   const { id, x, y, width, height, rotation, zIndex, type } = layer;
+  const [exportMode, setExportMode] = useState(false);
+  const effectManagerRef = useRef<StickerEffectManager | null>(null);
+
+  // Detect if we're in export mode by checking for html2canvas
+  useEffect(() => {
+    const checkExportMode = () => {
+      const isExporting = document.querySelector('.html2canvas-container') !== null;
+      const hasExportAttr = document.querySelector('[data-export-mode="true"]') !== null;
+      setExportMode(isExporting || hasExportAttr || useCanvasForExport);
+    };
+
+    // Check immediately and set up interval for html2canvas detection
+    checkExportMode();
+    const interval = setInterval(checkExportMode, 50);
+
+    return () => clearInterval(interval);
+  }, [useCanvasForExport]);
 
   const handleInteraction = (
     e: React.MouseEvent<HTMLElement> | React.TouchEvent<HTMLElement>,
@@ -103,6 +123,23 @@ const LayerRenderer: React.FC<LayerRendererProps> = ({ layer, isSelected, onSele
         }
       }
 
+      // Use canvas rendering during export for proper effects
+      if (exportMode) {
+        return (
+          <CanvasEffectRenderer
+            layer={stickerLayer}
+            width={renderWidth}
+            height={renderHeight}
+            style={{
+              width: `${renderWidth}px`,
+              height: `${renderHeight}px`,
+              pointerEvents: 'none'
+            }}
+          />
+        );
+      }
+
+      // Use CSS rendering for interactive editing
       const stickerStyles: React.CSSProperties = {
         width: `${renderWidth}px`,
         height: `${renderHeight}px`,

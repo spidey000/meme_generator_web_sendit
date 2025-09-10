@@ -348,6 +348,30 @@ The final meme is generated using `html2canvas` (or a similar library).
       });
     };
     ```
+ 
+ - The Share feature uses the same export target and UI-hiding as the existing download/export. The existing download behavior is unchanged.
+ 
+ ## Share (Web Share API)
+ - Adds a “Share” button in the toolbar to share the generated meme as a PNG via the native share sheet when supported (Web Share API Level 2, file sharing).
+ - If file sharing isn’t supported on the current platform, the action automatically falls back to the existing download/export.
+ - The PNG export uses the same canvas target and hides selection/handles as the normal download export.
+ 
+ Support notes:
+ - Android Chrome: Supported (Web Share API with files).
+ - Desktop browsers: Often do not support file sharing; will fall back to download.
+ - iOS Safari: File sharing support may be limited; will typically fall back to download.
+ - Secure context (HTTPS) is recommended for Web Share API.
+ 
+ ### Manual testing
+ - Desktop:
+   - Load a base image, click “Share” → expected: triggers download fallback.
+ - Android (Chrome):
+   - Load a base image, add text/stickers, click “Share” → expected: native share sheet with meme.png attached.
+ - iOS (Safari):
+   - Click “Share” → likely download fallback.
+ - Edge cases:
+   - “Share” is disabled until a base image is present.
+   - Canceling the native share sheet yields no error.
 
 ## Rotation Handle Implementation Deep Dive
 
@@ -403,6 +427,15 @@ The rotation mechanism allows users to intuitively rotate layers.
       // ... other styles
     };
     ```
+
+## Environment and build status
+- Build/typecheck verification deferred:
+ - The project expects Node 22.x; current environment used Node 20, causing EBADENGINE/EBADPLATFORM issues.
+- To verify locally later:
+ 1) Use Node 22.x.
+ 2) Install deps: npm ci
+ 3) Typecheck: npx tsc --noEmit
+ 4) Build: npm run build
 
 ## File Structure Overview
 

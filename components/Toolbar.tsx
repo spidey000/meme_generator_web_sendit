@@ -20,6 +20,8 @@ interface ToolbarProps {
   onSendToBack: (id: string) => void;
   hasBaseImage: boolean;
   stickers: StickerOption[]; // Add this new prop
+  getImageBlob: () => Promise<Blob>;
+  onDownloadMeme: () => void;
 }
 
 const Toolbar: React.FC<ToolbarProps> = ({
@@ -33,7 +35,9 @@ const Toolbar: React.FC<ToolbarProps> = ({
   onBringToFront,
   onSendToBack,
   hasBaseImage,
-  stickers // Destructure the new prop
+  stickers, // Destructure the new prop
+  getImageBlob,
+  onDownloadMeme,
 }) => {
   const [showStickerGallery, setShowStickerGallery] = useState(false);
   const [isEditorCollapsed, setIsEditorCollapsed] = useState(false);
@@ -68,14 +72,46 @@ const Toolbar: React.FC<ToolbarProps> = ({
     }
   };
 
+  // Share handler using Web Share API Level 2 with files, fallback to download
+  const handleShareClick = async () => {
+    if (!hasBaseImage) return;
+    try {
+      const blob = await getImageBlob();
+      const file = new File([blob], 'meme.png', { type: 'image/png' });
+      const canShareFiles =
+        typeof navigator !== 'undefined' &&
+        'share' in navigator &&
+        'canShare' in navigator &&
+        (navigator as any).canShare({ files: [file] });
+
+      if (canShareFiles) {
+        await (navigator as any).share({
+          files: [file],
+          title: 'Sendit Meme',
+          text: 'Check out this meme!',
+        });
+        return;
+      }
+      // Fallback to download if file sharing not supported
+      onDownloadMeme();
+    } catch (err: any) {
+      if (err && err.name === 'AbortError') {
+        // User canceled share; silently ignore
+        return;
+      }
+      console.error('Share failed:', err);
+      onDownloadMeme();
+    }
+  };
+
   return (
-    <aside 
-      id={id} 
+    <aside
+      id={id}
       className={`bg-brand-black p-3 md:p-4 space-y-3 md:space-y-6 flex flex-col
-                  w-full md:w-80 lg:w-96 
-                  md:h-full md:max-h-none max-h-[40vh] md:border-r-2 border-light-highlight 
+                  w-full md:w-80 lg:w-96
+                  md:h-full md:max-h-none max-h-[40vh] md:border-r-2 border-light-highlight
                   transition-all duration-300 ease-in-out
-                  overflow-y-auto 
+                  overflow-y-auto
                   ${hasBaseImage ? 'opacity-100' : 'opacity-50 pointer-events-none'}`}
     >
       {!hasBaseImage && (
@@ -112,6 +148,19 @@ const Toolbar: React.FC<ToolbarProps> = ({
             <span>Upload Sticker</span>
           </label>
           <input id="uploadSticker" type="file" accept="image/*" onChange={handleAddUploadedSticker} className="hidden" disabled={!hasBaseImage} />
+          {/* Primary actions area: Share button */}
+          <div className="pt-1 sm:pt-2">
+            <Button
+              onClick={handleShareClick}
+              fullWidth
+              size="sm"
+              icon={<Icon path="M4 16v2a2 2 0 002 2h8a2 2 0 002-2v-2m-6-10l4 4m0 0l4-4m-4 4V4" />}
+              aria-label="Share"
+              disabled={!hasBaseImage}
+            >
+              Share
+            </Button>
+          </div>
         </div>
 
         {showStickerGallery && hasBaseImage && (
