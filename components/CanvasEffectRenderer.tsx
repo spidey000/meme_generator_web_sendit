@@ -1,6 +1,7 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { StickerLayerProps } from '../types';
 import { StickerEffectManager } from '../utils/effectRenderer';
+import { getRenderContextForCanvas, drawStickerLayer } from '../utils/renderPipeline';
 
 interface CanvasEffectRendererProps {
   layer: StickerLayerProps;
@@ -8,6 +9,7 @@ interface CanvasEffectRendererProps {
   height: number;
   className?: string;
   style?: React.CSSProperties;
+  scale?: number; // default devicePixelRatio
 }
 
 const CanvasEffectRenderer: React.FC<CanvasEffectRendererProps> = ({
@@ -15,20 +17,17 @@ const CanvasEffectRenderer: React.FC<CanvasEffectRendererProps> = ({
   width,
   height,
   className = '',
-  style = {}
+  style = {},
+  scale,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isInitialized, setIsInitialized] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const effectManagerRef = useRef<StickerEffectManager | null>(null);
   const imageRef = useRef<HTMLImageElement | null>(null);
 
-  // Lazy initialization of effect manager
+  // Init
   useEffect(() => {
-    if (!effectManagerRef.current) {
-      effectManagerRef.current = new StickerEffectManager();
-    }
     setIsInitialized(true);
   }, []);
 
@@ -36,11 +35,12 @@ const CanvasEffectRenderer: React.FC<CanvasEffectRendererProps> = ({
   useEffect(() => {
     if (!layer.src || !isInitialized) return;
 
+    let cancelled = false;
     const loadImage = async () => {
       try {
         setError(null);
         const result = await StickerEffectManager.loadImage(layer.src);
-        
+        if (cancelled) return;
         if (result.loaded) {
           imageRef.current = result.image;
           setImageLoaded(true);
@@ -48,79 +48,43 @@ const CanvasEffectRenderer: React.FC<CanvasEffectRendererProps> = ({
           setError(result.error || 'Failed to load image');
           setImageLoaded(false);
         }
-      } catch (err) {
-        setError('Image loading failed');
-        setImageLoaded(false);
+      } catch {
+        if (!cancelled) {
+          setError('Image loading failed');
+          setImageLoaded(false);
+        }
       }
     };
 
     loadImage();
+    return () => {
+      cancelled = true;
+    };
   }, [layer.src, isInitialized]);
 
-  // Render canvas when image is loaded or effects change
+  // Render canvas when image is loaded or effects/layer change
   useEffect(() => {
-    if (!canvasRef.current || !imageLoaded || !imageRef.current || !effectManagerRef.current) {
-      return;
-    }
+    if (!canvasRef.current || !imageLoaded || !imageRef.current) return;
 
-    const renderCanvas = async () => {
-      try {
-        const canvas = canvasRef.current;
-        const ctx = canvas.getContext('2d');
-        
-        if (!ctx) {
-          setError('Canvas context not available');
-          return;
-        }
+    const canvas = canvasRef.current;
+    const effectiveScale = scale ?? (window.devicePixelRatio || 1);
 
-        // Set canvas size with device pixel ratio for sharp rendering
-        const dpr = window.devicePixelRatio || 1;
-        canvas.width = width * dpr;
-        canvas.height = height * dpr;
-        canvas.style.width = `${width}px`;
-        canvas.style.height = `${height}px`;
+    const { ctx } = getRenderContextForCanvas(canvas, width, height, effectiveScale);
 
-        // Scale context for high DPI displays
-        ctx.scale(dpr, dpr);
+    // Clear
+    ctx.clearRect(0, 0, width, height);
 
-        // Clear canvas
-        ctx.clearRect(0, 0, width, height);
-
-        // Save context state
-        ctx.save();
-
-        // Apply layer transformations
-        ctx.translate(width / 2, height / 2);
-        ctx.rotate((layer.rotation || 0) * Math.PI / 180);
-        ctx.translate(-width / 2, -height / 2);
-
-        // Render effects
-        await effectManagerRef.current.renderToCanvas(ctx, layer, imageRef.current!);
-
-        // Restore context state
-        ctx.restore();
-
-      } catch (err) {
+    // Draw sticker with effects via shared pipeline
+    drawStickerLayer(ctx, layer, imageRef.current, effectiveScale)
+      .catch(err => {
         setError('Canvas rendering failed');
         console.error('Canvas rendering error:', err);
-      }
-    };
-
-    renderCanvas();
-  }, [layer, width, height, imageLoaded]);
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      if (effectManagerRef.current) {
-        effectManagerRef.current.cleanup();
-      }
-    };
-  }, []);
+      });
+  }, [layer, width, height, imageLoaded, scale]);
 
   if (error) {
     return (
-      <div 
+      <div
         className={`canvas-effect-error ${className}`}
         style={{
           ...style,
@@ -144,7 +108,7 @@ const CanvasEffectRenderer: React.FC<CanvasEffectRendererProps> = ({
 
   if (!imageLoaded) {
     return (
-      <div 
+      <div
         className={`canvas-effect-loading ${className}`}
         style={{
           ...style,
@@ -171,7 +135,7 @@ const CanvasEffectRenderer: React.FC<CanvasEffectRendererProps> = ({
         ...style,
         width: `${width}px`,
         height: `${height}px`,
-        pointerEvents: 'none' // Don't interfere with mouse events
+        pointerEvents: 'none'
       }}
       data-layer-id={layer.id}
     />

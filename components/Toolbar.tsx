@@ -4,7 +4,7 @@ import { Layer, LayerType, TextLayerProps, StickerLayerProps, StickerOption } fr
 import TextLayerEditor from './TextLayerEditor';
 import StickerLayerEditor from './StickerLayerEditor';
 import StickerGallery from './StickerGallery';
-import LayerList from './LayerList'; // New component
+import LayerList from './LayerList';
 import { Button } from './common/Button';
 import { Icon } from './common/Icon';
 
@@ -19,7 +19,7 @@ interface ToolbarProps {
   onBringToFront: (id: string) => void;
   onSendToBack: (id: string) => void;
   hasBaseImage: boolean;
-  stickers: StickerOption[]; // Add this new prop
+  stickers: StickerOption[];
   getImageBlob: () => Promise<Blob>;
   onDownloadMeme: () => void;
 }
@@ -35,7 +35,7 @@ const Toolbar: React.FC<ToolbarProps> = ({
   onBringToFront,
   onSendToBack,
   hasBaseImage,
-  stickers, // Destructure the new prop
+  stickers,
   getImageBlob,
   onDownloadMeme,
 }) => {
@@ -43,6 +43,9 @@ const Toolbar: React.FC<ToolbarProps> = ({
   const [isEditorCollapsed, setIsEditorCollapsed] = useState(false);
   const [isToolbarContentVisible, setIsToolbarContentVisible] = useState(true);
 
+  // Flattened preview state
+  const [flattenedPreviewUrl, setFlattenedPreviewUrl] = useState<string | null>(null);
+  const [showFlattenedPreview, setShowFlattenedPreview] = useState(false);
 
   const handleAddText = () => {
     if (!hasBaseImage) return;
@@ -60,15 +63,15 @@ const Toolbar: React.FC<ToolbarProps> = ({
     if (event.target.files && event.target.files[0]) {
       const reader = new FileReader();
       reader.onload = (e) => {
-        onAddLayer(LayerType.STICKER, { 
-          src: e.target?.result as string, 
+        onAddLayer(LayerType.STICKER, {
+          src: e.target?.result as string,
           alt: 'Uploaded Sticker',
           width: 100,
           height: 100
         });
       };
       reader.readAsDataURL(event.target.files[0]);
-      event.target.value = ''; 
+      event.target.value = '';
     }
   };
 
@@ -104,6 +107,25 @@ const Toolbar: React.FC<ToolbarProps> = ({
     }
   };
 
+  // Flattened preview at screen scale (devicePixelRatio)
+  const handleFlattenedPreview = async () => {
+    if (!hasBaseImage) return;
+    try {
+      const blob = await getImageBlob(); // already uses devicePixelRatio scale
+      const url = URL.createObjectURL(blob);
+      setFlattenedPreviewUrl(url);
+      setShowFlattenedPreview(true);
+    } catch (e) {
+      console.error('Flattened preview failed', e);
+    }
+  };
+
+  const closeFlattenedPreview = () => {
+    if (flattenedPreviewUrl) URL.revokeObjectURL(flattenedPreviewUrl);
+    setFlattenedPreviewUrl(null);
+    setShowFlattenedPreview(false);
+  };
+
   return (
     <aside
       id={id}
@@ -122,8 +144,8 @@ const Toolbar: React.FC<ToolbarProps> = ({
 
       {/* Mobile Toggle Button for Toolbar Content */}
       <div className="md:hidden flex justify-end sticky top-0 bg-brand-black py-1 z-10 -mx-3 px-3 border-b border-light-highlight">
-        <Button 
-          variant="icon" 
+        <Button
+          variant="icon"
           onClick={() => setIsToolbarContentVisible(!isToolbarContentVisible)}
           aria-expanded={isToolbarContentVisible}
           aria-controls="toolbar-content"
@@ -148,8 +170,8 @@ const Toolbar: React.FC<ToolbarProps> = ({
             <span>Upload Sticker</span>
           </label>
           <input id="uploadSticker" type="file" accept="image/*" onChange={handleAddUploadedSticker} className="hidden" disabled={!hasBaseImage} />
-          {/* Primary actions area: Share button */}
-          <div className="pt-1 sm:pt-2">
+          {/* Primary actions area: Share and Flattened Preview */}
+          <div className="pt-1 sm:pt-2 grid grid-cols-2 gap-2">
             <Button
               onClick={handleShareClick}
               fullWidth
@@ -159,6 +181,17 @@ const Toolbar: React.FC<ToolbarProps> = ({
               disabled={!hasBaseImage}
             >
               Share
+            </Button>
+            <Button
+              onClick={handleFlattenedPreview}
+              fullWidth
+              size="sm"
+              variant="secondary"
+              icon={<Icon path="M4 4h16v12H4zM8 20h8" />}
+              aria-label="Flattened Preview"
+              disabled={!hasBaseImage}
+            >
+              Flattened Preview
             </Button>
           </div>
         </div>
@@ -175,7 +208,7 @@ const Toolbar: React.FC<ToolbarProps> = ({
         {hasBaseImage && layers.length > 0 && (
           <div className="space-y-1 sm:space-y-2 pt-2 sm:pt-4 border-t-2 border-light-highlight">
               <h3 className="text-lg sm:text-xl font-semibold text-accent-green mb-1 sm:mb-2">Layers</h3>
-              <LayerList 
+              <LayerList
                   layers={layers}
                   selectedLayerId={selectedLayer?.id || null}
                   onSelectLayer={onSelectLayer}
@@ -183,14 +216,13 @@ const Toolbar: React.FC<ToolbarProps> = ({
           </div>
         )}
 
-
         {/* Edit Layer Section */}
         {selectedLayer && hasBaseImage && (
           <div className="space-y-2 sm:space-y-4 pt-2 sm:pt-4 border-t-2 border-light-highlight">
             <div className="flex justify-between items-center">
               <h3 className="text-lg sm:text-xl font-semibold text-accent-green">Edit Layer</h3>
-              <Button 
-                variant="icon" 
+              <Button
+                variant="icon"
                 onClick={() => setIsEditorCollapsed(!isEditorCollapsed)}
                 aria-expanded={!isEditorCollapsed}
                 aria-controls="layer-editor-controls"
@@ -225,6 +257,26 @@ const Toolbar: React.FC<ToolbarProps> = ({
           </div>
         )}
       </div>
+
+      {/* Simple modal for flattened preview */}
+      {showFlattenedPreview && flattenedPreviewUrl && (
+        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
+          <div className="bg-brand-black border-2 border-light-highlight p-2 rounded-md relative max-w-[90vw] max-h-[90vh]">
+            <button
+              onClick={closeFlattenedPreview}
+              className="absolute -top-3 -right-3 bg-accent-green text-brand-black font-bold rounded-full w-8 h-8"
+              aria-label="Close flattened preview"
+            >
+              ×
+            </button>
+            <img
+              src={flattenedPreviewUrl}
+              alt="Flattened Preview"
+              className="max-w-[85vw] max-h-[85vh] object-contain"
+            />
+          </div>
+        </div>
+      )}
     </aside>
   );
 };

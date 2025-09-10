@@ -200,7 +200,7 @@ const App: React.FC = () => {
       const width = rect.width;
       const height = rect.height;
 
-      // Use canvas exporter for perfect effect preservation
+      // Use canvas exporter (unified pipeline)
       const exporter = new CanvasExporter();
       
       try {
@@ -209,8 +209,11 @@ const App: React.FC = () => {
           layers,
           width,
           height,
-          'image/jpeg',
-          0.9
+          {
+            format: 'image/jpeg',
+            quality: 0.9,
+            targetScale: window.devicePixelRatio || 1
+          }
         );
 
         // Create download link
@@ -263,7 +266,7 @@ const App: React.FC = () => {
       const width = rect.width;
       const height = rect.height;
 
-      // Use canvas exporter for perfect effect preservation
+      // Use canvas exporter (unified pipeline)
       const exporter = new CanvasExporter();
       
       try {
@@ -272,8 +275,11 @@ const App: React.FC = () => {
           layers,
           width,
           height,
-          'image/png',
-          1.0
+          {
+            format: 'image/png',
+            quality: 1.0,
+            targetScale: window.devicePixelRatio || 1
+          }
         );
         
         exporter.dispose();

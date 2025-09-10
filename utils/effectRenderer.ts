@@ -7,9 +7,9 @@ export interface EffectRenderer {
   renderToDOM(element: HTMLElement, layer: StickerLayerProps): void;
   
   /**
-   * Render effects to canvas context for export
+   * Render effects to canvas context for export/preview
    */
-  renderToCanvas(ctx: CanvasRenderingContext2D, layer: StickerLayerProps, image: HTMLImageElement): Promise<void>;
+  renderToCanvas(ctx: CanvasRenderingContext2D, layer: StickerLayerProps, image: HTMLImageElement, scale?: number): Promise<void>;
 }
 
 export interface CanvasEffectConfig {
@@ -44,8 +44,8 @@ export class StickerEffectManager implements EffectRenderer {
     this.domRenderer.render(element, layer);
   }
 
-  async renderToCanvas(ctx: CanvasRenderingContext2D, layer: StickerLayerProps, image: HTMLImageElement): Promise<void> {
-    return this.canvasRenderer.render(ctx, layer, image);
+  async renderToCanvas(ctx: CanvasRenderingContext2D, layer: StickerLayerProps, image: HTMLImageElement, scale: number = 1): Promise<void> {
+    return this.canvasRenderer.render(ctx, layer, image, scale);
   }
 
   /**
@@ -147,7 +147,7 @@ class DOMEffectRenderer {
 class CanvasEffectRenderer {
   private canvasPool: HTMLCanvasElement[] = [];
   
-  async render(ctx: CanvasRenderingContext2D, layer: StickerLayerProps, image: HTMLImageElement): Promise<void> {
+  async render(ctx: CanvasRenderingContext2D, layer: StickerLayerProps, image: HTMLImageElement, scale: number = 1): Promise<void> {
     const config: CanvasEffectConfig = {
       outlineWidth: layer.outlineWidth,
       outlineColor: layer.outlineColor,
@@ -159,15 +159,16 @@ class CanvasEffectRenderer {
       glowColor: layer.glowColor
     };
 
-    await this.renderWithEffects(ctx, image, layer.width || 0, layer.height || 0, config);
+    await this.renderWithEffects(ctx, image, (layer.width || 0), (layer.height || 0), config, scale);
   }
 
   private async renderWithEffects(
-    ctx: CanvasRenderingContext2D, 
-    image: HTMLImageElement, 
-    width: number, 
-    height: number, 
-    config: CanvasEffectConfig
+    ctx: CanvasRenderingContext2D,
+    image: HTMLImageElement,
+    width: number,
+    height: number,
+    config: CanvasEffectConfig,
+    scale: number
   ): Promise<void> {
     // Save current context state
     ctx.save();
@@ -177,9 +178,9 @@ class CanvasEffectRenderer {
     // Note: Rotation will be handled by the calling context
 
     // Apply effects in order: outline -> shadow -> glow -> main image
-    await this.applyOutlineEffect(ctx, image, width, height, config);
-    await this.applyShadowEffect(ctx, image, width, height, config);
-    await this.applyGlowEffect(ctx, image, width, height, config);
+    await this.applyOutlineEffect(ctx, image, width, height, config, scale);
+    await this.applyShadowEffect(ctx, image, width, height, config, scale);
+    await this.applyGlowEffect(ctx, image, width, height, config, scale);
     
     // Draw the main image
     ctx.drawImage(image, -width / 2, -height / 2, width, height);
@@ -189,18 +190,19 @@ class CanvasEffectRenderer {
   }
 
   private async applyOutlineEffect(
-    ctx: CanvasRenderingContext2D, 
-    image: HTMLImageElement, 
-    width: number, 
-    height: number, 
-    config: CanvasEffectConfig
+    ctx: CanvasRenderingContext2D,
+    image: HTMLImageElement,
+    width: number,
+    height: number,
+    config: CanvasEffectConfig,
+    scale: number
   ): Promise<void> {
     if (!config.outlineWidth || config.outlineWidth <= 0 || !config.outlineColor) return;
 
-    const outlineWidth = config.outlineWidth;
+    const outlineWidth = config.outlineWidth * scale;
     const outlineColor = config.outlineColor;
 
-    // Draw outline in 8 directions
+    // Draw outline in 8 directions (pseudo-outline)
     const offsets = [
       { x: outlineWidth, y: 0 },
       { x: -outlineWidth, y: 0 },
@@ -214,6 +216,8 @@ class CanvasEffectRenderer {
 
     ctx.save();
     ctx.globalCompositeOperation = 'source-over';
+
+    // Use tint by drawing with shadow to emulate solid outline behind transparent areas
     ctx.fillStyle = outlineColor;
 
     for (const offset of offsets) {
@@ -227,19 +231,20 @@ class CanvasEffectRenderer {
   }
 
   private async applyShadowEffect(
-    ctx: CanvasRenderingContext2D, 
-    image: HTMLImageElement, 
-    width: number, 
-    height: number, 
-    config: CanvasEffectConfig
+    ctx: CanvasRenderingContext2D,
+    image: HTMLImageElement,
+    width: number,
+    height: number,
+    config: CanvasEffectConfig,
+    scale: number
   ): Promise<void> {
     if (!config.shadowBlur || config.shadowBlur <= 0 || !config.shadowColor) return;
 
     ctx.save();
     ctx.shadowColor = config.shadowColor;
-    ctx.shadowBlur = config.shadowBlur;
-    ctx.shadowOffsetX = config.shadowOffsetX || 0;
-    ctx.shadowOffsetY = config.shadowOffsetY || 0;
+    ctx.shadowBlur = (config.shadowBlur || 0) * scale;
+    ctx.shadowOffsetX = (config.shadowOffsetX || 0) * scale;
+    ctx.shadowOffsetY = (config.shadowOffsetY || 0) * scale;
     ctx.globalCompositeOperation = 'source-over';
     
     ctx.drawImage(image, -width / 2, -height / 2, width, height);
@@ -247,11 +252,12 @@ class CanvasEffectRenderer {
   }
 
   private async applyGlowEffect(
-    ctx: CanvasRenderingContext2D, 
-    image: HTMLImageElement, 
-    width: number, 
-    height: number, 
-    config: CanvasEffectConfig
+    ctx: CanvasRenderingContext2D,
+    image: HTMLImageElement,
+    width: number,
+    height: number,
+    config: CanvasEffectConfig,
+    scale: number
   ): Promise<void> {
     if (!config.glowStrength || config.glowStrength <= 0 || !config.glowColor) return;
 
@@ -263,10 +269,10 @@ class CanvasEffectRenderer {
 
     // Apply multiple layers of glow with increasing blur
     const glowLayers = [
-      { blur: glowStrength * 0.3, alpha: 0.8 },
-      { blur: glowStrength * 0.6, alpha: 0.6 },
-      { blur: glowStrength * 0.9, alpha: 0.4 },
-      { blur: glowStrength * 1.2, alpha: 0.2 }
+      { blur: glowStrength * 0.3 * scale, alpha: 0.8 },
+      { blur: glowStrength * 0.6 * scale, alpha: 0.6 },
+      { blur: glowStrength * 0.9 * scale, alpha: 0.4 },
+      { blur: glowStrength * 1.2 * scale, alpha: 0.2 }
     ];
 
     for (const layer of glowLayers) {
@@ -305,4 +311,81 @@ class CanvasEffectRenderer {
     });
     this.canvasPool = [];
   }
+}
+
+/**
+ * Exported helper for shared pipeline: render sticker effects only.
+ * Caller is responsible for final drawImage(image, 0, 0, width, height).
+ * The ctx should already be transformed to the sticker's local space.
+ */
+export function renderStickerEffects(
+  ctx: CanvasRenderingContext2D,
+  image: HTMLImageElement | HTMLCanvasElement,
+  config: CanvasEffectConfig,
+  scale: number,
+  width: number,
+  height: number
+): void {
+  // Outline (8-direction pseudo-outline)
+  if (config.outlineWidth && config.outlineWidth > 0 && config.outlineColor) {
+    const w = (config.outlineWidth || 0) * scale;
+    const c = config.outlineColor;
+    const offsets = [
+      { x: w, y: 0 },
+      { x: -w, y: 0 },
+      { x: 0, y: w },
+      { x: 0, y: -w },
+      { x: w * 0.707, y: w * 0.707 },
+      { x: -w * 0.707, y: w * 0.707 },
+      { x: w * 0.707, y: -w * 0.707 },
+      { x: -w * 0.707, y: -w * 0.707 },
+    ];
+    ctx.save();
+    ctx.globalCompositeOperation = 'source-over';
+    // Draw offset images to simulate outline
+    for (const o of offsets) {
+      ctx.save();
+      ctx.translate(o.x, o.y);
+      ctx.drawImage(image, 0, 0, width, height);
+      ctx.restore();
+    }
+    ctx.restore();
+  }
+
+  // Shadow
+  if (config.shadowBlur && config.shadowBlur > 0 && config.shadowColor) {
+    ctx.save();
+    ctx.shadowColor = config.shadowColor;
+    ctx.shadowBlur = (config.shadowBlur || 0) * scale;
+    ctx.shadowOffsetX = (config.shadowOffsetX || 0) * scale;
+    ctx.shadowOffsetY = (config.shadowOffsetY || 0) * scale;
+    ctx.drawImage(image, 0, 0, width, height);
+    ctx.restore();
+  }
+
+  // Glow
+  if (config.glowStrength && config.glowStrength > 0 && config.glowColor) {
+    const gs = config.glowStrength * scale;
+    const layers = [
+      { blur: gs * 0.5, alpha: 0.6 },
+      { blur: gs * 1.0, alpha: 0.4 },
+      { blur: gs * 1.5, alpha: 0.2 },
+    ];
+    ctx.save();
+    for (const l of layers) {
+      ctx.save();
+      ctx.shadowColor = config.glowColor!;
+      ctx.shadowBlur = l.blur;
+      ctx.globalAlpha = l.alpha;
+      ctx.drawImage(image, 0, 0, width, height);
+      ctx.restore();
+    }
+    ctx.restore();
+  }
+
+  // Reset shadow state to avoid contaminating later draws
+  ctx.shadowColor = 'transparent';
+  ctx.shadowBlur = 0;
+  ctx.shadowOffsetX = 0;
+  ctx.shadowOffsetY = 0;
 }

@@ -1,4 +1,3 @@
-
 # Sendit Meme Generator
 
 ## Overview
@@ -372,6 +371,128 @@ The final meme is generated using `html2canvas` (or a similar library).
  - Edge cases:
    - “Share” is disabled until a base image is present.
    - Canceling the native share sheet yields no error.
+
+## Unified Canvas 2D Render Pipeline
+
+To ensure perfect parity between the editor's preview and exported meme images, and to correctly scale visual effects (outline, glow, shadow) regardless of export resolution, the application now utilizes a unified, scale-aware Canvas 2D rendering pipeline. This approach eliminates discrepancies that arose from using CSS-based effects for the preview, which could not be reliably replicated during canvas export.
+
+*   **What it is and why**: A single, consistent set of drawing functions is used for both displaying layers in the editor and rendering them for export. This guarantees that "what you see is what you get," preventing visual differences in effects when exporting at various resolutions.
+*   **Where it lives**: The core rendering logic is encapsulated in [`utils/renderPipeline.ts`](utils/renderPipeline.ts). Key functions include:
+    *   [`drawMeme()`](utils/renderPipeline.ts): Orchestrates the drawing of the entire meme, including the base image and all layers.
+    *   [`drawTextLayer()`](utils/renderPipeline.ts): Renders individual text layers with all their configured effects (outline, glow, shadow).
+    *   [`drawStickerLayer()`](utils/renderPipeline.ts): Renders individual sticker layers, including their pseudo-outline effects.
+    *   [`getRenderContextForCanvas()`](utils/renderPipeline.ts): Provides a Canvas 2D rendering context, potentially with scaling applied.
+*   **How export reuses the same pipeline**: The export functionality, managed by [`utils/canvasExporter.ts`](utils/canvasExporter.ts), directly calls the functions from [`utils/renderPipeline.ts`](utils/renderPipeline.ts) to draw the meme onto an offscreen canvas. This ensures the exact same rendering logic is applied for the final output.
+*   **How preview uses the pipeline**:
+    *   [`components/TextCanvasPreview.tsx`](components/TextCanvasPreview.tsx): This component is responsible for rendering text layers using the unified pipeline for accurate preview of text effects.
+    *   [`components/CanvasEffectRenderer.tsx`](components/CanvasEffectRenderer.tsx): This component integrates the rendering pipeline to display effects for various layers within the editor, replacing previous CSS-based effect implementations.
+
+## Usage Instructions
+
+### Running the Project
+
+Follow the "Getting Started" instructions above to set up and run the development server.
+
+### Using the Editor
+
+1.  **Add Base Image**: Click "Upload Image" or "Templates" to start your meme.
+2.  **Add Text/Stickers**: Use the "Add Text" or "Add Sticker" buttons in the toolbar.
+3.  **Configure Effects**: Select a text or sticker layer on the canvas. Use the controls in the toolbar to adjust properties like font, color, size, outline, glow, and shadow.
+4.  **Manipulate Layers**: Drag to move, use the handles to resize, and the dedicated rotation handle to rotate layers.
+
+### Flattened Preview
+
+A "Flattened Preview" button is available in the toolbar ([`components/Toolbar.tsx`](components/Toolbar.tsx)). Clicking this button renders the entire meme onto a temporary canvas using the exact same unified render pipeline that the export function uses. This allows for immediate visual validation of export parity directly within the editor, ensuring that all effects and scaling appear as they will in the final exported image.
+
+### Exporting with Options
+
+To export your meme, click the "Export" button. The export process uses the unified pipeline and can be configured with various options:
+
+*   `targetScale`: Multiplier for the output resolution. For example, `window.devicePixelRatio` can be used to export at the device's native pixel density.
+*   `format`: Output image format (e.g., `'image/jpeg'`, `'image/png'`).
+*   `quality`: For JPEG format, a number between 0 and 1 indicating image quality.
+
+Example of calling the export function (conceptually):
+```typescript
+import { exportToDataURL } from './utils/canvasExporter';
+
+// ... inside an async function or event handler
+const dataUrl = await exportToDataURL(
+  memeCanvasRef.current, // The HTMLCanvasElement to render from
+  layers, // All meme layers
+  baseImage, // The base image
+  {
+    targetScale: window.devicePixelRatio * 2, // Export at 2x device resolution
+    format: 'image/png',
+    quality: 0.95, // High quality for JPEG/WebP, ignored for PNG
+  }
+);
+
+const link = document.createElement('a');
+link.download = `my-awesome-meme.png`;
+link.href = dataUrl;
+link.click();
+```
+
+## Effects Behavior and Scaling
+
+All visual effects are now rendered directly onto the Canvas 2D context, ensuring consistent behavior and proper scaling.
+
+*   **Outline (Text)**: Implemented using `ctx.strokeText()` with `ctx.lineJoin = 'round'`. The `lineWidth` property is dynamically scaled by `outlineWidth * 2 * scale` to maintain proportional thickness at different export resolutions.
+*   **Glow and Shadow (Text)**: Achieved using `ctx.shadowBlur`, `ctx.shadowOffsetX`, and `ctx.shadowOffsetY` properties. These properties are also scaled by the `targetScale` to ensure effects like blur radius and offset distances are consistent across resolutions. A multiple-pass approach is used for glow effects to enhance their appearance.
+*   **Sticker Outlines**: A "pseudo-outline" effect is applied by drawing the sticker multiple times with slight offsets in 8 directions before drawing the main sticker. These offsets are multiplied by the `export scale` to ensure the outline thickness scales correctly.
+*   **Notes on `devicePixelRatio`**: The `window.devicePixelRatio` significantly impacts how resolution affects effect thickness. When exporting at higher scales (e.g., `targetScale: 2`), effects like outlines and blur will naturally appear thicker in terms of raw pixels, but proportionally correct relative to the content. Always consider the `targetScale` when evaluating effect appearance.
+
+## Manual Testing Checklist (Regression Path)
+
+Before any release, perform the following checks to ensure the render pipeline and effects parity are maintained:
+
+1.  **Create a Complex Meme**:
+    *   Add a text layer with a thick outline, a strong glow, and an offset shadow.
+    *   Add a sticker layer with similar effects (e.g., a noticeable pseudo-outline).
+    *   Ensure layers are overlapping and positioned at various locations.
+2.  **Compare Previews and Exports**:
+    *   **Live Preview**: Observe the meme in the main editor canvas.
+    *   **Flattened Preview**: Click the "Flattened Preview" button in the toolbar and compare it against the live preview. They should be visually identical.
+    *   **Exported Images**: Export the meme at different `targetScale` values (e.g., 1x, 2x, 3x resolution). Open these exported images and compare them to the live and flattened previews.
+3.  **Layer Manipulation Consistency**:
+    *   Rotate several layers (text and stickers) with effects applied.
+    *   Resize layers with effects.
+    *   Confirm that effects (outline thickness, glow intensity, shadow offset/blur) remain consistent and proportionally scaled relative to the layer content across all manipulations and export scales.
+4.  **Acceptance Criteria**:
+    *   **Parity**: The live preview, flattened preview, and exported images must show identical visual effects at equivalent scales.
+    *   **Proportional Scaling**: Outline thickness, blur radius, and shadow offsets must scale proportionally with the `targetScale` of the export.
+
+## Troubleshooting
+
+*   **Outlines look thin at high scales**:
+    *   Confirm that the `scale` parameter passed to [`drawMeme()`](utils/renderPipeline.ts) and related drawing functions is correct.
+    *   Verify that `lineWidth` for text outlines is calculated as `outlineWidth * 2 * scale` within [`drawTextLayer()`](utils/renderPipeline.ts).
+*   **Glow/Shadow look weak or incorrect**:
+    *   Ensure `ctx.shadowBlur`, `ctx.shadowOffsetX`, and `ctx.shadowOffsetY` are correctly scaled by the `targetScale` in [`effectRenderer.ts`](utils/effectRenderer.ts) or [`drawTextLayer()`](utils/renderPipeline.ts).
+    *   Confirm that `ctx.shadow*` properties are reset (e.g., `ctx.shadowBlur = 0;`) between drawing passes to prevent unintended accumulation of effects.
+*   **Sticker effects differ from text effects**:
+    *   Verify that pseudo-outline offsets for stickers are correctly multiplied by the `scale` parameter.
+    *   Ensure the same `scale` value is consistently used for both preview and export rendering of stickers.
+*   **TypeScript reports transient React/JSX errors after edits**:
+    *   This can sometimes occur due to caching issues. Try restarting the TypeScript server (VS Code: `Ctrl+Shift+P` -> "TypeScript: Restart TS Server") or restarting the development server (`npm run dev`).
+
+## Developer Notes
+
+*   **Avoid CSS-based Effects**: Do not reintroduce CSS properties like `text-stroke`, `text-shadow`, or `drop-shadow` filters for preview rendering. These effects are difficult to replicate accurately on a Canvas 2D context and will lead to export parity issues. All effects must be rendered via the Canvas 2D pipeline.
+*   **Use Shared Render Pipeline Functions**: Always utilize the shared drawing functions provided in [`utils/renderPipeline.ts`](utils/renderPipeline.ts) (e.g., [`drawTextLayer()`](utils/renderPipeline.ts), [`drawStickerLayer()`](utils/renderPipeline.ts)) for rendering layers. Avoid duplicating drawing logic elsewhere in the codebase.
+*   **Maintain Z-Index and Context State**: Ensure `zIndex` ordering is consistent across all layers. When applying transforms or specific drawing styles, always use `ctx.save()` before and `ctx.restore()` after to prevent styles from leaking to other drawing operations.
+*   **Optional Background Parity**: For complete visual parity, consider rendering the base image background through the unified pipeline as well, rather than relying solely on `html2canvas` or direct image drawing. The "Flattened Preview" button serves as a strong verification tool for overall parity.
+
+## Changelog
+
+### Version X.Y.Z (Date)
+
+*   **Refactor**: Implemented a unified, scale-aware Canvas 2D rendering pipeline to ensure perfect visual parity between editor preview and exported images.
+*   **Feature**: Removed all CSS-based effects from the editor preview, replacing them with Canvas 2D rendering.
+*   **Feature**: Effects (outline, glow, shadow, sticker pseudo-outline) now scale proportionally with export resolution.
+*   **Feature**: Added "Flattened Preview" button for immediate visual validation of export parity.
+*   **Improvement**: Enhanced effect consistency across layer manipulations (resize, rotate).
 
 ## Rotation Handle Implementation Deep Dive
 

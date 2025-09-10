@@ -1,11 +1,9 @@
-import { Layer, LayerType, StickerLayerProps, TextLayerProps } from '../types';
-import { BRAND_COLORS } from '../constants';
-import { StickerEffectManager } from './effectRenderer';
+import { Layer } from '../types';
+import { drawMeme } from './renderPipeline';
 
 export class CanvasExporter {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
-  private effectManager: StickerEffectManager;
 
   constructor() {
     this.canvas = document.createElement('canvas');
@@ -14,62 +12,71 @@ export class CanvasExporter {
       throw new Error('Canvas 2D context not supported');
     }
     this.ctx = context;
-    this.effectManager = new StickerEffectManager();
   }
 
   /**
-   * Export the meme to a data URL using pure canvas rendering
+   * Create an offscreen render context with scale-aware transform.
+   */
+  getRenderContext(
+    width: number,
+    height: number,
+    targetScale: number
+  ): { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D; scale: number } {
+    const scale = targetScale || 1;
+    this.canvas.width = Math.max(1, Math.floor(width * scale));
+    this.canvas.height = Math.max(1, Math.floor(height * scale));
+    this.ctx.setTransform(scale, 0, 0, scale, 0, 0);
+    this.ctx.imageSmoothingEnabled = true;
+    return { canvas: this.canvas, ctx: this.ctx, scale };
+  }
+
+  /**
+   * Export the meme to a data URL using the shared render pipeline
    */
   async exportToDataURL(
-    baseImage: HTMLImageElement,
+    baseImage: HTMLImageElement | HTMLCanvasElement | null,
     layers: Layer[],
     width: number,
     height: number,
-    format: 'image/jpeg' | 'image/png' = 'image/jpeg',
-    quality: number = 0.9
+    options?: {
+      format?: 'image/jpeg' | 'image/png';
+      quality?: number;
+      targetScale?: number;
+    }
   ): Promise<string> {
-    // Set canvas size with high DPI support
-    const dpr = window.devicePixelRatio || 1;
-    this.canvas.width = width * dpr;
-    this.canvas.height = height * dpr;
-    
-    // Scale context for high DPI
-    this.ctx.scale(dpr, dpr);
-    
-    // Clear canvas with background color
-    this.ctx.fillStyle = BRAND_COLORS.primaryBg;
-    this.ctx.fillRect(0, 0, width, height);
+    const format = options?.format ?? 'image/jpeg';
+    const quality = options?.quality ?? 0.9;
+    const targetScale = options?.targetScale !== undefined ? options.targetScale : (window.devicePixelRatio || 1);
 
-    // Draw base image
-    if (baseImage) {
-      this.ctx.drawImage(baseImage, 0, 0, width, height);
-    }
+    const { canvas, ctx, scale } = this.getRenderContext(width, height, targetScale);
 
-    // Sort layers by z-index for proper rendering order
-    const sortedLayers = [...layers].sort((a, b) => a.zIndex - b.zIndex);
+    // Clear and draw using the shared pipeline
+    ctx.save();
+    ctx.setTransform(scale, 0, 0, scale, 0, 0);
+    ctx.clearRect(0, 0, width, height);
+    ctx.restore();
 
-    // Render each layer
-    for (const layer of sortedLayers) {
-      await this.renderLayer(layer, width, height);
-    }
+    await drawMeme(ctx, { baseImage, layers, width, height, scale });
 
-    // Convert to data URL
-    return this.canvas.toDataURL(format, quality);
+    return canvas.toDataURL(format, quality);
   }
 
   /**
-   * Export to blob for sharing APIs
+   * Export to blob for sharing APIs using the shared render pipeline
    */
   async exportToBlob(
-    baseImage: HTMLImageElement,
+    baseImage: HTMLImageElement | HTMLCanvasElement | null,
     layers: Layer[],
     width: number,
     height: number,
-    format: 'image/jpeg' | 'image/png' = 'image/png',
-    quality: number = 1.0
+    options?: {
+      format?: 'image/jpeg' | 'image/png';
+      quality?: number;
+      targetScale?: number;
+    }
   ): Promise<Blob> {
-    const dataURL = await this.exportToDataURL(baseImage, layers, width, height, format, quality);
-    
+    const dataURL = await this.exportToDataURL(baseImage, layers, width, height, options);
+
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
       xhr.onload = () => {
@@ -86,110 +93,11 @@ export class CanvasExporter {
     });
   }
 
-  private async renderLayer(layer: Layer, canvasWidth: number, canvasHeight: number): Promise<void> {
-    if (layer.type === LayerType.TEXT) {
-      await this.renderTextLayer(layer as TextLayerProps, canvasWidth, canvasHeight);
-    } else if (layer.type === LayerType.STICKER) {
-      await this.renderStickerLayer(layer as StickerLayerProps, canvasWidth, canvasHeight);
-    }
-  }
-
-  private async renderTextLayer(layer: TextLayerProps, canvasWidth: number, canvasHeight: number): Promise<void> {
-    const { x, y, width, height, rotation, text, fontFamily, fontSize, color, outlineWidth, outlineColor, shadowBlur, shadowColor, shadowOffsetX, shadowOffsetY, glowStrength, glowColor } = layer;
-
-    this.ctx.save();
-    
-    // Move to layer center and apply rotation
-    this.ctx.translate(x + width / 2, y + height / 2);
-    this.ctx.rotate((rotation || 0) * Math.PI / 180);
-    this.ctx.translate(-width / 2, -height / 2);
-
-    // Set font properties
-    this.ctx.font = `${fontSize}px ${fontFamily}`;
-    this.ctx.textAlign = 'center';
-    this.ctx.textBaseline = 'middle';
-    this.ctx.fillStyle = color;
-
-    // Apply text effects
-    let shadowText = '';
-    
-    // Outline effect
-    if (outlineWidth && outlineWidth > 0 && outlineColor) {
-      this.ctx.strokeStyle = outlineColor;
-      this.ctx.lineWidth = outlineWidth * 2;
-      this.ctx.strokeText(text, width / 2, height / 2);
-    }
-
-    // Apply shadow effect
-    if (shadowBlur && shadowBlur > 0 && shadowColor) {
-      this.ctx.shadowColor = shadowColor;
-      this.ctx.shadowBlur = shadowBlur;
-      this.ctx.shadowOffsetX = shadowOffsetX || 0;
-      this.ctx.shadowOffsetY = shadowOffsetY || 0;
-    }
-
-    // Apply glow effect
-    if (glowStrength && glowStrength > 0 && glowColor) {
-      // Apply multiple layers for glow effect
-      this.ctx.save();
-      this.ctx.globalAlpha = 0.6;
-      this.ctx.shadowColor = glowColor;
-      this.ctx.shadowBlur = glowStrength * 0.5;
-      this.ctx.fillText(text, width / 2, height / 2);
-      
-      this.ctx.globalAlpha = 0.4;
-      this.ctx.shadowBlur = glowStrength;
-      this.ctx.fillText(text, width / 2, height / 2);
-      
-      this.ctx.globalAlpha = 0.2;
-      this.ctx.shadowBlur = glowStrength * 1.5;
-      this.ctx.fillText(text, width / 2, height / 2);
-      this.ctx.restore();
-      
-      // Reset shadow for main text
-      this.ctx.shadowColor = 'transparent';
-      this.ctx.shadowBlur = 0;
-      this.ctx.shadowOffsetX = 0;
-      this.ctx.shadowOffsetY = 0;
-    }
-
-    // Draw the text
-    this.ctx.fillText(text, width / 2, height / 2);
-    
-    this.ctx.restore();
-  }
-
-  private async renderStickerLayer(layer: StickerLayerProps, canvasWidth: number, canvasHeight: number): Promise<void> {
-    const { x, y, width, height, rotation, src } = layer;
-
-    // Load the image
-    const imageResult = await StickerEffectManager.loadImage(src);
-    if (!imageResult.loaded) {
-      console.warn(`Failed to load sticker image: ${src}`);
-      return;
-    }
-
-    const image = imageResult.image;
-
-    this.ctx.save();
-    
-    // Move to layer center and apply rotation
-    this.ctx.translate(x + width / 2, y + height / 2);
-    this.ctx.rotate((rotation || 0) * Math.PI / 180);
-    this.ctx.translate(-width / 2, -height / 2);
-
-    // Render with effects using the effect manager
-    await this.effectManager.renderToCanvas(this.ctx, layer, image);
-    
-    this.ctx.restore();
-  }
-
   /**
    * Clean up resources
    */
   dispose(): void {
     this.canvas.width = 0;
     this.canvas.height = 0;
-    this.effectManager.cleanup();
   }
 }
