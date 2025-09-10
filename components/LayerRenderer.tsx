@@ -53,7 +53,10 @@ const LayerRenderer: React.FC<LayerRendererProps> = ({ layer, isSelected, onSele
    display: 'flex',
    alignItems: 'center',
    justifyContent: 'center',
-   overflow: 'hidden',
+   // Stickers intentionally bypass local container clipping so they can render beyond
+   // the template/meme bounding box (effects like outline/glow may extend).
+   // Keep text layers clipped as before.
+   overflow: layer.type === LayerType.STICKER ? 'visible' : 'hidden',
    userSelect: 'none',
  };
 

@@ -3,6 +3,20 @@ import { StickerLayerProps } from '../types';
 import { StickerEffectManager } from '../utils/effectRenderer';
 import { getRenderContextForCanvas, drawStickerLayer } from '../utils/renderPipeline';
 
+/**
+ * Compute extra visual padding (in CSS pixels) required for a sticker preview canvas
+ * so effects (outline/shadow/glow) are not clipped by the layer box.
+ * Stickers intentionally bypass clipping; we enlarge the canvas and offset it.
+ */
+function computeStickerPaddingCss(layer: StickerLayerProps): number {
+  const outline = layer.outlineWidth || 0;
+  const shadow = (layer.shadowBlur || 0) + Math.max(Math.abs(layer.shadowOffsetX || 0), Math.abs(layer.shadowOffsetY || 0));
+  const glow = layer.glowStrength || 0;
+  // Choose the dominant effect radius and add a small safety margin
+  const maxRadius = Math.max(outline, shadow, glow);
+  return Math.ceil(maxRadius > 0 ? maxRadius * 1.1 : 0);
+}
+
 interface CanvasEffectRendererProps {
   layer: StickerLayerProps;
   width: number;
@@ -25,6 +39,12 @@ const CanvasEffectRenderer: React.FC<CanvasEffectRendererProps> = ({
   const [imageLoaded, setImageLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const imageRef = useRef<HTMLImageElement | null>(null);
+
+  // Precompute CSS-space padding for this layer so the canvas can visually extend beyond the layer box.
+  // This ensures stickers render beyond the template bounding box without being clipped locally.
+  const padCss = computeStickerPaddingCss(layer);
+  const cssWidth = width + 2 * padCss;
+  const cssHeight = height + 2 * padCss;
 
   // Init
   useEffect(() => {
@@ -69,10 +89,18 @@ const CanvasEffectRenderer: React.FC<CanvasEffectRendererProps> = ({
     const canvas = canvasRef.current;
     const effectiveScale = scale ?? (window.devicePixelRatio || 1);
 
-    const { ctx } = getRenderContextForCanvas(canvas, width, height, effectiveScale);
+    // Use expanded canvas size (CSS px), actual backing store is handled by getRenderContextForCanvas
+    const expandedWidth = width + 2 * padCss;
+    const expandedHeight = height + 2 * padCss;
 
-    // Clear
-    ctx.clearRect(0, 0, width, height);
+    const { ctx } = getRenderContextForCanvas(canvas, expandedWidth, expandedHeight, effectiveScale);
+
+    // Clear expanded area
+    ctx.clearRect(0, 0, expandedWidth, expandedHeight);
+
+    // Offset drawing by pad so content remains centered relative to original layer box
+    ctx.save();
+    ctx.translate(padCss, padCss);
 
     // Draw sticker with effects via shared pipeline
     // Important: zero out global transforms for preview-only rendering,
@@ -82,8 +110,11 @@ const CanvasEffectRenderer: React.FC<CanvasEffectRendererProps> = ({
       .catch(err => {
         setError('Canvas rendering failed');
         console.error('Canvas rendering error:', err);
+      })
+      .finally(() => {
+        ctx.restore();
       });
-  }, [layer, width, height, imageLoaded, scale]);
+  }, [layer, width, height, imageLoaded, scale, padCss]);
 
   if (error) {
     return (
@@ -136,8 +167,13 @@ const CanvasEffectRenderer: React.FC<CanvasEffectRendererProps> = ({
       className={`canvas-effect-renderer ${className}`}
       style={{
         ...style,
-        width: `${width}px`,
-        height: `${height}px`,
+        // Enlarge CSS box so effect pixels outside the layer area are visible.
+        // Then offset it back by -pad to visually align with the layer box.
+        width: `${cssWidth}px`,
+        height: `${cssHeight}px`,
+        position: 'relative',
+        left: `-${padCss}px`,
+        top: `-${padCss}px`,
         pointerEvents: 'none'
       }}
       data-layer-id={layer.id}

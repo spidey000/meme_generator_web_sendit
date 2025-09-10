@@ -1,8 +1,8 @@
-# Sendit Meme Generator
+# sendit memgen
 
 ## Overview
 
-The Sendit Meme Generator is a dynamic React-based web application that empowers users to create engaging memes. Users can upload a base image, choose from a gallery of popular meme templates, and then enhance their selection by adding customizable text elements and vibrant stickers. The application offers a rich set of tools for manipulating these layers, including moving, resizing, rotating, and managing their order. Styled with a sleek dark theme and neon green accents using Tailwind CSS, it provides an intuitive and visually appealing user experience.
+sendit memgen is a dynamic React-based web application that empowers users to create engaging memes. Users can upload a base image, choose from a gallery of popular meme templates, and then enhance their selection by adding customizable text elements and vibrant stickers. The application offers a rich set of tools for manipulating these layers, including moving, resizing, rotating, and managing their order. Styled with a sleek dark theme and neon green accents using Tailwind CSS, it provides an intuitive and visually appealing user experience.
 
 ## Features
 

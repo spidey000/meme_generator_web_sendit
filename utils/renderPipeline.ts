@@ -30,21 +30,36 @@ export async function drawMeme(
     width: number;
     height: number;
     scale: number;
+    /**
+     * Optional draw offset to allow content (e.g., stickers) outside the original
+     * template bounds to be included in export without clipping.
+     * When provided, all drawing will be translated by (-offsetX, -offsetY).
+     */
+    offsetX?: number;
+    offsetY?: number;
   }
 ): Promise<void> {
-  const { baseImage, layers, width, height, scale } = params;
+  const { baseImage, layers, width, height, scale, offsetX = 0, offsetY = 0 } = params;
 
-  // Clear
+  // Clear target surface
   ctx.save();
   ctx.setTransform(scale, 0, 0, scale, 0, 0);
   ctx.clearRect(0, 0, width, height);
   ctx.restore();
 
-  // Base image
+  // Apply global translation so that negative-layer coordinates become visible
+  ctx.save();
+  ctx.setTransform(scale, 0, 0, scale, 0, 0);
+  if (offsetX !== 0 || offsetY !== 0) {
+    ctx.translate(-offsetX, -offsetY);
+  }
+
+  // Base image (drawn at 0,0 in translated space)
   if (baseImage) {
     ctx.drawImage(baseImage, 0, 0, width, height);
   }
 
+  // Draw layers in z-order
   const sorted = [...layers].sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0));
 
   for (const layer of sorted) {
@@ -52,13 +67,15 @@ export async function drawMeme(
       await drawTextLayer(ctx, layer as TextLayerProps, scale);
     } else if (layer.type === LayerType.STICKER) {
       const sticker = layer as StickerLayerProps;
-      // Load the sticker image (scale-aware effects handled inside drawStickerLayer)
       if (!sticker.src) continue;
       const res = await StickerEffectManager.loadImage(sticker.src);
       if (!res.loaded) continue;
       await drawStickerLayer(ctx, sticker, res.image, scale);
     }
   }
+
+  // Restore after translated drawing
+  ctx.restore();
 }
 
 /**

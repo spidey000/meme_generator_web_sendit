@@ -159,17 +159,44 @@ const Toolbar: React.FC<ToolbarProps> = ({
       <div id="toolbar-content" className={`${isToolbarContentVisible ? 'block' : 'hidden'} md:block space-y-3 md:space-y-6 flex-grow`}>
         <div className="space-y-2 sm:space-y-3">
           <h3 className="text-lg sm:text-xl font-semibold text-accent-green">Add Elements</h3>
-          <Button onClick={handleAddText} fullWidth icon={<Icon path="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zm0 6a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1v-2zm0 6a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1v-2z" />} disabled={!hasBaseImage} size="sm">
-            Add Text
-          </Button>
-          <Button onClick={() => setShowStickerGallery(true)} fullWidth icon={<Icon path="M4 3a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 6a2 2 0 11-4 0 2 2 0 014 0zm-4 4a2 2 0 100 4 2 2 0 000-4z" />} disabled={!hasBaseImage} size="sm">
-            Add Sticker
-          </Button>
-          <label htmlFor="uploadSticker" className={`w-full flex items-center justify-center space-x-2 px-3 py-1.5 sm:px-4 sm:py-2 text-xs sm:text-sm bg-button-green text-brand-black font-semibold rounded-md hover:bg-accent-green transition-colors duration-150 cursor-pointer ${!hasBaseImage ? 'opacity-50 cursor-not-allowed' : ''}`}>
-            <Icon path="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-            <span>Upload Sticker</span>
-          </label>
-          <input id="uploadSticker" type="file" accept="image/*" onChange={handleAddUploadedSticker} className="hidden" disabled={!hasBaseImage} />
+
+          {/* Primary actions (mobile row, desktop stacked) */}
+          <div className="flex flex-row gap-2 flex-nowrap sm:flex-col">
+            <Button
+              onClick={handleAddText}
+              className="flex-1 sm:w-full"
+              icon={<Icon path="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zm0 6a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1v-2zm0 6a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1v-2z" />}
+              disabled={!hasBaseImage}
+              size="sm"
+            >
+              Add Text
+            </Button>
+            <Button
+              onClick={() => setShowStickerGallery(true)}
+              className="flex-1 sm:w-full"
+              icon={<Icon path="M4 3a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 6a2 2 0 11-4 0 2 2 0 014 0zm-4 4a2 2 0 100 4 2 2 0 000-4z" />}
+              disabled={!hasBaseImage}
+              size="sm"
+            >
+              Add Sticker
+            </Button>
+            <label
+              htmlFor="uploadSticker"
+              className={`flex-1 sm:w-full flex items-center justify-center space-x-2 px-3 py-1.5 sm:px-4 sm:py-2 text-xs sm:text-sm bg-button-green text-brand-black font-semibold rounded-md hover:bg-accent-green transition-colors duration-150 cursor-pointer ${!hasBaseImage ? 'opacity-50 cursor-not-allowed' : ''}`}
+            >
+              <Icon path="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+              <span>Upload Sticker</span>
+            </label>
+          </div>
+          <input
+            id="uploadSticker"
+            type="file"
+            accept="image/*"
+            onChange={handleAddUploadedSticker}
+            className="hidden"
+            disabled={!hasBaseImage}
+          />
+
           {/* Primary actions area: Share and Flattened Preview */}
           <div className="pt-1 sm:pt-2 grid grid-cols-2 gap-2">
             <Button

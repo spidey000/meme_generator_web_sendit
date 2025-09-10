@@ -490,7 +490,7 @@ const App: React.FC = () => {
   return (
     <div className="flex flex-col h-screen bg-primary-bg text-text-white font-sans">
       <header className="p-3 sm:p-4 bg-brand-black shadow-md flex justify-between items-center border-b-2 border-accent-green">
-        <h1 className="text-2xl sm:text-3xl font-bold text-accent-green">SENDIT.MEME</h1>
+        <h1 className="text-2xl sm:text-3xl font-bold text-accent-green">sendit memgen</h1>
         <div className="flex items-center space-x-2 sm:space-x-3">
           <button
             onClick={() => setShowMemeTemplateGallery(true)}
