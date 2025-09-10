@@ -6,7 +6,7 @@ import MemeCanvas from './components/MemeCanvas';
 import Toolbar from './components/Toolbar';
 import MemeTemplateGallery from './components/MemeTemplateGallery';
 import html2canvas from 'html2canvas';
-import { StickerEffectManager } from './utils/effectRenderer';
+import { CanvasExporter } from './utils/canvasExporter';
 
 
 const App: React.FC = () => {
@@ -175,52 +175,56 @@ const App: React.FC = () => {
       // Wait for UI to update
       await new Promise(resolve => setTimeout(resolve, 100));
       
-      if (memeCanvasRef.current) {
-        const canvasAreaToCapture = memeCanvasRef.current.querySelector('#meme-canvas-interactive-area');
-        if (canvasAreaToCapture) {
-          // Pre-load all sticker images for canvas rendering
-          const stickerLayers = layers.filter(layer => layer.type === LayerType.STICKER) as StickerLayerProps[];
-          const imageLoadPromises = stickerLayers.map(layer => 
-            StickerEffectManager.loadImage(layer.src)
-          );
-          
-          const loadedImages = await Promise.all(imageLoadPromises);
-          
-          // Check if all images loaded successfully
-          const failedLoads = loadedImages.filter(result => !result.loaded);
-          if (failedLoads.length > 0) {
-            console.warn('Some sticker images failed to load, continuing with export...');
-          }
-          
-          const canvas = await html2canvas(canvasAreaToCapture as HTMLElement, {
-            useCORS: true,
-            backgroundColor: BRAND_COLORS.primaryBg,
-            scale: window.devicePixelRatio * 1.5,
-            logging: false,
-            removeContainer: true,
-            onclone: (documentClone) => {
-              // Hide interaction handles and selection outlines
-              documentClone.querySelectorAll('.interaction-handle').forEach(el => (el as HTMLElement).style.display = 'none');
-              documentClone.querySelectorAll('.layer-selected-outline').forEach(el => (el as HTMLElement).style.border = 'none');
-              
-              // Trigger canvas rendering mode for stickers
-              documentClone.querySelectorAll('[data-layer-id]').forEach(el => {
-                const layerElement = el as HTMLElement;
-                layerElement.setAttribute('data-export-mode', 'true');
-              });
-            }
-          });
-          
-          const image = canvas.toDataURL('image/jpeg', 0.9);
-          const link = document.createElement('a');
-          link.download = `sendit-fun-${Date.now()}.jpg`;
-          link.href = image;
-          link.click();
-        } else {
-          console.error("Could not find #meme-canvas-interactive-area to capture.");
-          alert("Sorry, there was an error preparing your meme for export.");
-        }
+      if (!baseImage) {
+        alert("Please add a base image before exporting.");
+        return;
       }
+
+      // Load base image
+      const baseImageElement = new Image();
+      baseImageElement.crossOrigin = 'anonymous';
+      
+      await new Promise((resolve, reject) => {
+        baseImageElement.onload = resolve;
+        baseImageElement.onerror = reject;
+        baseImageElement.src = baseImage;
+      });
+
+      // Get canvas dimensions
+      const canvasArea = memeCanvasRef.current?.querySelector('#meme-canvas-interactive-area');
+      if (!canvasArea) {
+        throw new Error('Could not find canvas area');
+      }
+
+      const rect = canvasArea.getBoundingClientRect();
+      const width = rect.width;
+      const height = rect.height;
+
+      // Use canvas exporter for perfect effect preservation
+      const exporter = new CanvasExporter();
+      
+      try {
+        const dataURL = await exporter.exportToDataURL(
+          baseImageElement,
+          layers,
+          width,
+          height,
+          'image/jpeg',
+          0.9
+        );
+
+        // Create download link
+        const link = document.createElement('a');
+        link.download = `sendit-fun-${Date.now()}.jpg`;
+        link.href = dataURL;
+        link.click();
+        
+        exporter.dispose();
+      } catch (exportError) {
+        exporter.dispose();
+        throw exportError;
+      }
+      
     } catch (err) {
       console.error("Error generating meme:", err);
       alert("Sorry, there was an error generating your meme. Please try again.");
@@ -230,52 +234,55 @@ const App: React.FC = () => {
   // Returns a PNG Blob of the current meme (used for Web Share API)
   const getImageBlob = async (): Promise<Blob> => {
     try {
-      // Clear selection to hide outlines/handles similar to handleExportMeme
       setSelectedLayerId(null);
-
-      // Wait a frame to ensure UI updates are reflected before capture
-      await new Promise(resolve => setTimeout(resolve, 100));
-
-      if (!memeCanvasRef.current) {
-        throw new Error('Meme canvas ref not available');
-      }
-
-      const canvasAreaToCapture = memeCanvasRef.current.querySelector('#meme-canvas-interactive-area');
-      if (!canvasAreaToCapture) {
-        throw new Error('Could not find #meme-canvas-interactive-area to capture.');
-      }
-
-      // Pre-load all sticker images for canvas rendering
-      const stickerLayers = layers.filter(layer => layer.type === LayerType.STICKER) as StickerLayerProps[];
-      const imageLoadPromises = stickerLayers.map(layer => 
-        StickerEffectManager.loadImage(layer.src)
-      );
       
-      const loadedImages = await Promise.all(imageLoadPromises);
+      // Wait for UI to update
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      if (!baseImage) {
+        throw new Error('Please add a base image before sharing.');
+      }
 
-      const canvas = await html2canvas(canvasAreaToCapture as HTMLElement, {
-        useCORS: true,
-        backgroundColor: BRAND_COLORS.primaryBg,
-        scale: window.devicePixelRatio * 1.5,
-        logging: false,
-        removeContainer: true,
-        onclone: (documentClone) => {
-          documentClone.querySelectorAll('.interaction-handle').forEach(el => (el as HTMLElement).style.display = 'none');
-          documentClone.querySelectorAll('.layer-selected-outline').forEach(el => (el as HTMLElement).style.border = 'none');
-          
-          // Trigger canvas rendering mode for stickers
-          documentClone.querySelectorAll('[data-layer-id]').forEach(el => {
-            const layerElement = el as HTMLElement;
-            layerElement.setAttribute('data-export-mode', 'true');
-          });
-        }
+      // Load base image
+      const baseImageElement = new Image();
+      baseImageElement.crossOrigin = 'anonymous';
+      
+      await new Promise((resolve, reject) => {
+        baseImageElement.onload = resolve;
+        baseImageElement.onerror = reject;
+        baseImageElement.src = baseImage;
       });
 
-    const blob = await new Promise<Blob>((resolve, reject) =>
-      canvas.toBlob(b => b ? resolve(b) : reject(new Error('Blob conversion failed')), 'image/png', 1)
-    );
+      // Get canvas dimensions
+      const canvasArea = memeCanvasRef.current?.querySelector('#meme-canvas-interactive-area');
+      if (!canvasArea) {
+        throw new Error('Could not find canvas area');
+      }
 
-    return blob;
+      const rect = canvasArea.getBoundingClientRect();
+      const width = rect.width;
+      const height = rect.height;
+
+      // Use canvas exporter for perfect effect preservation
+      const exporter = new CanvasExporter();
+      
+      try {
+        const blob = await exporter.exportToBlob(
+          baseImageElement,
+          layers,
+          width,
+          height,
+          'image/png',
+          1.0
+        );
+        
+        exporter.dispose();
+        return blob;
+      } catch (exportError) {
+        exporter.dispose();
+        throw exportError;
+      }
+      
     } catch (error) {
       console.error('Error generating image blob:', error);
       throw new Error('Failed to generate image for sharing');
