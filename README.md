@@ -441,9 +441,18 @@ All visual effects are now rendered directly onto the Canvas 2D context, ensurin
 *   **Outline (Text)**: Implemented using `ctx.strokeText()` with `ctx.lineJoin = 'round'`. The `lineWidth` property is dynamically scaled by `outlineWidth * 2 * scale` to maintain proportional thickness at different export resolutions.
 *   **Glow and Shadow (Text)**: Achieved using `ctx.shadowBlur`, `ctx.shadowOffsetX`, and `ctx.shadowOffsetY` properties. These properties are also scaled by the `targetScale` to ensure effects like blur radius and offset distances are consistent across resolutions. A multiple-pass approach is used for glow effects to enhance their appearance.
 *   **Sticker Outlines**: A "pseudo-outline" effect is applied by drawing the sticker multiple times with slight offsets in 8 directions before drawing the main sticker. These offsets are multiplied by the `export scale` to ensure the outline thickness scales correctly.
+    *   **Rendering pipeline: Sticker outline**: The [`applyOutlineEffect()`](utils/effectRenderer.ts:192) routine now uses a tinted silhouette mask created by [`createTintedSilhouette()`](utils/effectRenderer.ts:356) for outline passes. This prevents duplication of the full-color sticker image and ensures a clean outline. The canvas context state is reset between passes to avoid unintended drawing artifacts.
 *   **Notes on `devicePixelRatio`**: The `window.devicePixelRatio` significantly impacts how resolution affects effect thickness. When exporting at higher scales (e.g., `targetScale: 2`), effects like outlines and blur will naturally appear thicker in terms of raw pixels, but proportionally correct relative to the content. Always consider the `targetScale` when evaluating effect appearance.
 
 ## Manual Testing Checklist (Regression Path)
+
+### Testing steps: Sticker Outline Fix
+1.  **Enable Outline**: Select a sticker layer and enable the "Outline" option in the toolbar.
+2.  **Adjust Outline**: Experiment with various outline widths and colors.
+3.  **Verify**: Confirm that the sticker displays a clean, solid outline without any duplicate images in the background.
+4.  **Test PNG/SVG**: Repeat steps 1-3 with both PNG and SVG sticker types.
+5.  **Export**: Export the meme and verify the outline appears correctly in the exported image.
+
 
 Before any release, perform the following checks to ensure the render pipeline and effects parity are maintained:
 
@@ -468,6 +477,10 @@ Before any release, perform the following checks to ensure the render pipeline a
 *   **Outlines look thin at high scales**:
     *   Confirm that the `scale` parameter passed to [`drawMeme()`](utils/renderPipeline.ts) and related drawing functions is correct.
     *   Verify that `lineWidth` for text outlines is calculated as `outlineWidth * 2 * scale` within [`drawTextLayer()`](utils/renderPipeline.ts).
+*   **Sticker outlines appear soft or blurry at large widths**:
+    *   The current silhouette-based outline uses a fixed number of offset passes. For very large outline widths, this can lead to a slightly softer appearance. Consider implementing morphological dilation (e.g., using `ctx.filter = 'dilate(Xpx)'` or multiple passes with increasing offsets) for a sharper look at extreme widths.
+*   **Sticker outline rendering performance**:
+    *   Generating the tinted silhouette mask for each outline pass can be computationally intensive, especially for complex stickers or many layers. For performance-critical scenarios, consider caching the generated silhouette masks.
 *   **Glow/Shadow look weak or incorrect**:
     *   Ensure `ctx.shadowBlur`, `ctx.shadowOffsetX`, and `ctx.shadowOffsetY` are correctly scaled by the `targetScale` in [`effectRenderer.ts`](utils/effectRenderer.ts) or [`drawTextLayer()`](utils/renderPipeline.ts).
     *   Confirm that `ctx.shadow*` properties are reset (e.g., `ctx.shadowBlur = 0;`) between drawing passes to prevent unintended accumulation of effects.
@@ -488,6 +501,7 @@ Before any release, perform the following checks to ensure the render pipeline a
 
 ### Version X.Y.Z (Date)
 
+*   **Fix**: Resolved a bug where enabling the "Outline" option on stickers caused duplicates in the background. The fix involved switching to a tinted silhouette mask for outline passes and resetting the canvas state between passes.
 *   **Refactor**: Implemented a unified, scale-aware Canvas 2D rendering pipeline to ensure perfect visual parity between editor preview and exported images.
 *   **Feature**: Removed all CSS-based effects from the editor preview, replacing them with Canvas 2D rendering.
 *   **Feature**: Effects (outline, glow, shadow, sticker pseudo-outline) now scale proportionally with export resolution.

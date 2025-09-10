@@ -189,6 +189,10 @@ class CanvasEffectRenderer {
     ctx.restore();
   }
 
+  /**
+   * Draw sticker outline by rendering a tinted alpha silhouette at multiple offsets.
+   * Uses an offscreen silhouette and resets canvas state between passes to avoid duplicating the full-color image.
+   */
   private async applyOutlineEffect(
     ctx: CanvasRenderingContext2D,
     image: HTMLImageElement,
@@ -349,9 +353,8 @@ class CanvasEffectRenderer {
 }
 
 /**
- * Build a tinted silhouette (alpha mask colored with a solid) from an image.
- * The resulting canvas contains only the alpha of the source, filled uniformly with 'color'.
- * We clear and reset state on the offscreen context to avoid residual state across frames.
+ * Create a tinted alpha-only silhouette of `image` on an offscreen canvas.
+ * Offscreen context is reset/cleared to avoid residual drawing state.
  */
 function createTintedSilhouette(
   image: HTMLImageElement | HTMLCanvasElement,
