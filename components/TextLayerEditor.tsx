@@ -20,11 +20,12 @@ const TextLayerEditor: React.FC<TextLayerEditorProps> = ({ layer, onUpdateLayer 
   const [isGlowExpanded, setIsGlowExpanded] = useState(false);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-    const { name, value } = e.target;
+    const { name, value } = e.target as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
     let parsedValue: string | number = value;
-    if (e.target.type === 'number') {
-      parsedValue = parseFloat(value);
-      if (isNaN(parsedValue)) parsedValue = 0; 
+    // Ensure range/number controls provide numeric values
+    if ((e.target as HTMLInputElement).type === 'number' || (e.target as HTMLInputElement).type === 'range') {
+      parsedValue = parseFloat(value as string);
+      if (isNaN(parsedValue)) parsedValue = 0;
     }
     onUpdateLayer({ [name]: parsedValue });
   };
@@ -104,8 +105,9 @@ const TextLayerEditor: React.FC<TextLayerEditorProps> = ({ layer, onUpdateLayer 
           value={layer.outlineWidth}
           onChange={handleInputChange}
           min={0}
-          max={20}
-          step={0.5}
+          max={50}
+          step={1}
+          mode="range"
           aria-label="Text outline width in pixels"
         />
       </SectionToggle>
@@ -124,8 +126,9 @@ const TextLayerEditor: React.FC<TextLayerEditorProps> = ({ layer, onUpdateLayer 
           value={layer.shadowBlur}
           onChange={handleInputChange}
           min={0}
-          max={50}
+          max={100}
           step={1}
+          mode="range"
           aria-label="Text shadow blur in pixels"
         />
         <div className="grid grid-cols-2 gap-2">
@@ -134,9 +137,10 @@ const TextLayerEditor: React.FC<TextLayerEditorProps> = ({ layer, onUpdateLayer 
             name="shadowOffsetX"
             value={layer.shadowOffsetX}
             onChange={handleInputChange}
-            min={-50}
-            max={50}
+            min={-100}
+            max={100}
             step={1}
+            mode="range"
             aria-label="Text shadow X offset"
           />
           <NumberInput
@@ -144,9 +148,10 @@ const TextLayerEditor: React.FC<TextLayerEditorProps> = ({ layer, onUpdateLayer 
             name="shadowOffsetY"
             value={layer.shadowOffsetY}
             onChange={handleInputChange}
-            min={-50}
-            max={50}
+            min={-100}
+            max={100}
             step={1}
+            mode="range"
             aria-label="Text shadow Y offset"
           />
         </div>
@@ -166,8 +171,9 @@ const TextLayerEditor: React.FC<TextLayerEditorProps> = ({ layer, onUpdateLayer 
           value={layer.glowStrength}
           onChange={handleInputChange}
           min={0}
-          max={50}
+          max={100}
           step={1}
+          mode="range"
           aria-label="Text glow strength in pixels"
         />
       </SectionToggle>

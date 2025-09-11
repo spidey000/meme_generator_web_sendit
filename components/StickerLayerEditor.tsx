@@ -16,11 +16,12 @@ const StickerLayerEditor: React.FC<StickerLayerEditorProps> = ({ layer, onUpdate
   const [isGlowExpanded, setIsGlowExpanded] = useState(false);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-    const { name, value } = e.target;
+    const { name, value } = e.target as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
     let parsedValue: string | number = value;
-    if (e.target.type === 'number') {
-      parsedValue = parseFloat(value);
-      if (isNaN(parsedValue)) parsedValue = 0; 
+    // Convert range/number values to numeric to keep controlled values as numbers
+    if ((e.target as HTMLInputElement).type === 'number' || (e.target as HTMLInputElement).type === 'range') {
+      parsedValue = parseFloat(value as string);
+      if (isNaN(parsedValue)) parsedValue = 0;
     }
     onUpdateLayer({ [name]: parsedValue });
   };
@@ -69,8 +70,9 @@ const StickerLayerEditor: React.FC<StickerLayerEditorProps> = ({ layer, onUpdate
           value={layer.outlineWidth || 0} // Default to 0 if not set
           onChange={handleInputChange}
           min={0}
-          max={20}
-          step={0.5}
+          max={50}
+          step={1}
+          mode="range"
           aria-label="Sticker outline width in pixels"
         />
       </SectionToggle>
@@ -89,8 +91,9 @@ const StickerLayerEditor: React.FC<StickerLayerEditorProps> = ({ layer, onUpdate
           value={layer.shadowBlur || 0} // Default to 0 if not set
           onChange={handleInputChange}
           min={0}
-          max={50}
+          max={100}
           step={1}
+          mode="range"
           aria-label="Sticker shadow blur in pixels"
         />
         <div className="grid grid-cols-2 gap-2">
@@ -99,9 +102,10 @@ const StickerLayerEditor: React.FC<StickerLayerEditorProps> = ({ layer, onUpdate
             name="shadowOffsetX"
             value={layer.shadowOffsetX || 0} // Default to 0 if not set
             onChange={handleInputChange}
-            min={-50}
-            max={50}
+            min={-100}
+            max={100}
             step={1}
+            mode="range"
             aria-label="Sticker shadow X offset"
           />
           <NumberInput
@@ -109,9 +113,10 @@ const StickerLayerEditor: React.FC<StickerLayerEditorProps> = ({ layer, onUpdate
             name="shadowOffsetY"
             value={layer.shadowOffsetY || 0} // Default to 0 if not set
             onChange={handleInputChange}
-            min={-50}
-            max={50}
+            min={-100}
+            max={100}
             step={1}
+            mode="range"
             aria-label="Sticker shadow Y offset"
           />
         </div>
@@ -131,8 +136,9 @@ const StickerLayerEditor: React.FC<StickerLayerEditorProps> = ({ layer, onUpdate
           value={layer.glowStrength || 0} // Default to 0 if not set
           onChange={handleInputChange}
           min={0}
-          max={50}
+          max={100}
           step={1}
+          mode="range"
           aria-label="Sticker glow strength in pixels"
         />
       </SectionToggle>
