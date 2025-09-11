@@ -77,26 +77,71 @@ const Toolbar: React.FC<ToolbarProps> = ({
   };
 
   // Share handler using centralized robust share utility with native-first + graceful fallbacks
-  const handleShareClick = async () => {
+  const handleShareClick = async (event: React.MouseEvent) => {
     if (!hasBaseImage) return;
+    
+    // For Android Telegram, ensure proper user gesture context
+    const isAndroidTelegram = typeof navigator !== 'undefined' && 
+      /Telegram/i.test(navigator.userAgent) && /Android/i.test(navigator.userAgent);
+    
     try {
-      const blob = await getImageBlob();
-      await shareImageBlob(blob, {
-        filename: 'meme.png',
-        title: 'Sendit Meme',
-        text: 'Made with Sendit Meme Generator',
-        url: window.location.href,
-        onFallback: (reason) => {
-          // Non-blocking notice of fallback path (keep UX minimal)
-          console.info('Share fallback:', reason);
-        }
-      });
+      if (isAndroidTelegram) {
+        // For Android Telegram, we need to handle the user gesture differently
+        event.preventDefault();
+        
+        // Create a temporary button to ensure proper user gesture context
+        const tempButton = document.createElement('button');
+        tempButton.style.position = 'absolute';
+        tempButton.style.left = '-9999px';
+        document.body.appendChild(tempButton);
+        
+        const blob = await getImageBlob();
+        
+        // Use a click event on the temporary button to trigger download
+        const clickEvent = new MouseEvent('click', {
+          view: window,
+          bubbles: true,
+          cancelable: true
+        });
+        
+        tempButton.addEventListener('click', async () => {
+          try {
+            await shareImageBlob(blob, {
+              filename: 'meme.png',
+              title: 'Sendit Meme',
+              text: 'Made with Sendit Meme Generator',
+              url: window.location.href,
+              onFallback: (reason) => {
+                console.info('Share fallback:', reason);
+              }
+            });
+          } catch (err: any) {
+            if (err && err.name !== 'AbortError') {
+              console.error('Share failed:', err);
+            }
+          }
+        });
+        
+        tempButton.dispatchEvent(clickEvent);
+        setTimeout(() => document.body.removeChild(tempButton), 100);
+      } else {
+        // Standard handling for other browsers
+        const blob = await getImageBlob();
+        await shareImageBlob(blob, {
+          filename: 'meme.png',
+          title: 'Sendit Meme',
+          text: 'Made with Sendit Meme Generator',
+          url: window.location.href,
+          onFallback: (reason) => {
+            console.info('Share fallback:', reason);
+          }
+        });
+      }
     } catch (err: any) {
       if (err && err.name === 'AbortError') {
         // User canceled share; no fallback cascade
         return;
       }
-      // The share utility already attempted fallbacks; just log here.
       console.error('Share failed:', err);
     }
   };

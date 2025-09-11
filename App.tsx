@@ -216,11 +216,50 @@ const App: React.FC = () => {
           }
         );
 
-        // Create download link
+        // Create download link with Android Telegram compatibility
         const link = document.createElement('a');
         link.download = `sendit-fun-${Date.now()}.jpg`;
         link.href = dataURL;
-        link.click();
+        link.style.display = 'none';
+        
+        // Check if we're in Android Telegram
+        const isAndroidTelegram = typeof navigator !== 'undefined' && 
+          /Telegram/i.test(navigator.userAgent) && /Android/i.test(navigator.userAgent);
+        
+        if (isAndroidTelegram) {
+          // For Android Telegram, use multiple strategies
+          document.body.appendChild(link);
+          
+          // Try multiple click methods
+          try {
+            link.click();
+          } catch (e) {
+            // Fallback: create mouse event
+            const event = new MouseEvent('click', {
+              view: window,
+              bubbles: true,
+              cancelable: true
+            });
+            link.dispatchEvent(event);
+          }
+          
+          // Additional fallback: redirect to data URL
+          setTimeout(() => {
+            try {
+              window.location.href = dataURL;
+            } catch (e) {
+              // Final fallback: open new tab
+              window.open(dataURL, '_blank');
+            }
+          }, 100);
+          
+          setTimeout(() => {
+            document.body.removeChild(link);
+          }, 200);
+        } else {
+          // Standard behavior for other browsers
+          link.click();
+        }
         
         exporter.dispose();
       } catch (exportError) {

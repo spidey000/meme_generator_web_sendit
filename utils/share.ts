@@ -92,6 +92,77 @@ function tryTelegramNativeShare(url: string, text?: string): boolean {
 }
 
 /**
+ * Detects if current browser likely blocks blob operations (common in Telegram Android)
+ */
+function isLikelyBlockingBlobs(): boolean {
+  if (typeof navigator === "undefined") return false;
+  const ua = navigator.userAgent.toLowerCase();
+  
+  // Telegram Android browsers are known to block blob operations
+  return (
+    (ua.includes('telegram') && ua.includes('android')) ||
+    (ua.includes('webview') && ua.includes('android'))
+  );
+}
+
+/**
+ * Forces a download on Android Telegram using data URL approach
+ */
+async function forceAndroidTelegramDownload(blob: Blob, filename: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    try {
+      // Convert blob to data URL
+      const reader = new FileReader();
+      reader.onload = () => {
+        const dataUrl = reader.result as string;
+        
+        // Create a download link
+        const link = document.createElement('a');
+        link.href = dataUrl;
+        link.download = filename;
+        link.style.display = 'none';
+        
+        // Force click with multiple strategies
+        document.body.appendChild(link);
+        
+        // Try multiple click methods
+        try {
+          link.click();
+        } catch (e) {
+          // Fallback: create mouse event
+          const event = new MouseEvent('click', {
+            view: window,
+            bubbles: true,
+            cancelable: true
+          });
+          link.dispatchEvent(event);
+        }
+        
+        // Fallback: redirect to data URL
+        setTimeout(() => {
+          try {
+            window.location.href = dataUrl;
+          } catch (e) {
+            // Final fallback: open new tab
+            window.open(dataUrl, '_blank');
+          }
+        }, 100);
+        
+        setTimeout(() => {
+          document.body.removeChild(link);
+          resolve();
+        }, 200);
+      };
+      
+      reader.onerror = () => reject(new Error('Failed to read blob'));
+      reader.readAsDataURL(blob);
+    } catch (error) {
+      reject(error);
+    }
+  });
+}
+
+/**
  * Checks if the browser can share files (Web Share API Level 2).
  */
 export function canShareFiles(files: File[]): boolean {
@@ -197,7 +268,30 @@ export async function shareImageBlob(
 
   const hasNavigatorShare = typeof navigator !== "undefined" && !!(navigator as Navigator).share;
 
-  // If in Telegram, try Telegram native methods first
+  // Special handling for Android Telegram (most restrictive environment)
+  if (isTelegramInApp() && isAndroid()) {
+    try {
+      // Try Telegram native share first
+      const objectUrl = URL.createObjectURL(blob);
+      try {
+        if (tryTelegramNativeShare(objectUrl, text)) {
+          return;
+        }
+      } finally {
+        URL.revokeObjectURL(objectUrl);
+      }
+      
+      // For Android Telegram, skip Web Share API (usually blocked) and go straight to download
+      await forceAndroidTelegramDownload(blob, filename);
+      onFallback?.("android-telegram-download");
+      return;
+    } catch (error) {
+      console.warn('Android Telegram download failed:', error);
+      // Fall through to general fallbacks
+    }
+  }
+
+  // If in Telegram (iOS or other), try Telegram native methods first
   if (isTelegramInApp()) {
     // Create object URL for Telegram sharing
     const objectUrl = URL.createObjectURL(blob);
