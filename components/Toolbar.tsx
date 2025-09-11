@@ -83,12 +83,13 @@ const Toolbar: React.FC<ToolbarProps> = ({
     }
   };
 
-  // Enhanced share handler with Telegram-specific feedback
+  // Enhanced share handler with platform-specific feedback
   const handleShareClick = async (event: React.MouseEvent<HTMLButtonElement>) => {
     if (!hasBaseImage) return;
     
     const env = getTelegramEnvironment();
-    console.log(`Share clicked - Telegram: ${env.isTelegram}, Platform: ${env.platform}`);
+    
+    console.log(`Share clicked - Telegram: ${env.isTelegram}, Brave: ${env.isBrave}, Platform: ${env.platform}`);
     
     try {
       const blob = await getImageBlob();
@@ -106,11 +107,15 @@ const Toolbar: React.FC<ToolbarProps> = ({
         onFallback: (reason) => {
           console.info('Share fallback:', reason);
           // Show user feedback for fallback
-          if (env.isTelegram) {
-            setTimeout(() => {
-              alert(`Sharing via ${reason}. Check the new tab for your meme!`);
-            }, 500);
-          }
+          setTimeout(() => {
+            if (env.isTelegram) {
+              alert(`📱 Telegram分享模式: ${reason}. 请在新标签页中长按图片保存!`);
+            } else if (env.isBrave) {
+              alert(`🦁 Brave浏览器: 正在下载图片，请检查下载文件夹!`);
+            } else {
+              alert(`分享后备方案: ${reason}. 图片已开始下载!`);
+            }
+          }, 500);
         }
       });
       
@@ -121,11 +126,13 @@ const Toolbar: React.FC<ToolbarProps> = ({
       }
       console.error('Share failed:', err);
       
-      // Enhanced error handling for Telegram
+      // Enhanced error handling for different browsers
       if (env.isTelegram) {
-        alert('Share failed in Telegram. Try using the Download button instead and share manually!');
+        alert('📱 Telegram分享失败，请使用下载按钮并手动分享!');
+      } else if (env.isBrave) {
+        alert('🦁 Brave浏览器分享失败，请检查下载文件夹或使用截图功能!');
       } else {
-        alert('Share failed. Please try again or use the Download button.');
+        alert('分享失败，请重试或使用下载按钮。');
       }
     } finally {
       // Restore button state
@@ -184,39 +191,72 @@ const Toolbar: React.FC<ToolbarProps> = ({
       </div>
       
       <div id="toolbar-content" className={`${isToolbarContentVisible ? 'block' : 'hidden'} md:block space-y-3 md:space-y-6 flex-grow`}>
-        {/* Telegram User Guidance */}
-        {telegramEnv.isTelegram && (
-          <div className="bg-blue-900 bg-opacity-20 border border-blue-500 rounded-lg p-3 mb-4">
+        {/* Platform-specific User Guidance */}
+        {(telegramEnv.isTelegram || telegramEnv.isBrave) && (
+          <div className={`rounded-lg p-3 mb-4 ${
+            telegramEnv.isTelegram 
+              ? 'bg-blue-900 bg-opacity-20 border border-blue-500' 
+              : 'bg-orange-900 bg-opacity-20 border border-orange-500'
+          }`}>
             <div className="flex items-start space-x-2">
-              <div className="text-blue-400 flex-shrink-0 mt-0.5">
+              <div className={`flex-shrink-0 mt-0.5 ${
+                telegramEnv.isTelegram ? 'text-blue-400' : 'text-orange-400'
+              }`}>
                 <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
                 </svg>
               </div>
               <div className="flex-1">
                 <div className="flex items-center justify-between mb-2">
-                  <h4 className="text-blue-300 font-semibold text-sm">📱 Telegram User Guide</h4>
+                  <h4 className={`font-semibold text-sm ${
+                    telegramEnv.isTelegram ? 'text-blue-300' : 'text-orange-300'
+                  }`}>
+                    {telegramEnv.isTelegram ? '📱 Telegram User Guide' : '🦁 Brave Browser Guide'}
+                  </h4>
                   <Button
                     variant="icon"
                     size="sm"
                     onClick={() => setShowTelegramHelp(!showTelegramHelp)}
-                    className="text-blue-400 hover:text-blue-300"
+                    className={telegramEnv.isTelegram ? 'text-blue-400 hover:text-blue-300' : 'text-orange-400 hover:text-orange-300'}
                   >
                     <Icon path={showTelegramHelp ? "M5 15l7-7 7 7" : "M19 9l-7 7-7-7"} className="w-4 h-4" />
                   </Button>
                 </div>
                 {showTelegramHelp ? (
-                  <div className="text-blue-200 text-xs space-y-2">
-                    <p><strong>Share Button:</strong> Opens image in new tab - long press to save/share</p>
-                    <p><strong>Download Button:</strong> May need to check notifications or use screenshot</p>
-                    <p><strong>💡 Pro Tip:</strong> Take a screenshot of your meme for quick sharing!</p>
-                    <div className="mt-2 p-2 bg-blue-800 bg-opacity-30 rounded text-xs">
-                      <p><strong>Platform:</strong> {telegramEnv.platform.toUpperCase()} Telegram</p>
-                      <p><strong>Status:</strong> Enhanced compatibility mode active</p>
-                    </div>
+                  <div className={`text-xs space-y-2 ${
+                    telegramEnv.isTelegram ? 'text-blue-200' : 'text-orange-200'
+                  }`}>
+                    {telegramEnv.isTelegram ? (
+                      <>
+                        <p><strong>Share Button:</strong> Opens image in new tab - long press to save/share</p>
+                        <p><strong>Download Button:</strong> May need to check notifications or use screenshot</p>
+                        <p><strong>💡 Pro Tip:</strong> Take a screenshot for quick sharing!</p>
+                        <div className="mt-2 p-2 bg-blue-800 bg-opacity-30 rounded text-xs">
+                          <p><strong>Platform:</strong> {telegramEnv.platform.toUpperCase()} Telegram</p>
+                          <p><strong>Status:</strong> Enhanced compatibility mode active</p>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <p><strong>Share Button:</strong> May download directly due to Brave security features</p>
+                        <p><strong>Download Button:</strong> Works normally - check downloads folder</p>
+                        <p><strong>💡 Pro Tip:</strong> Check your downloads folder for shared images</p>
+                        <div className="mt-2 p-2 bg-orange-800 bg-opacity-30 rounded text-xs">
+                          <p><strong>Browser:</strong> Brave Browser detected</p>
+                          <p><strong>Status:</strong> Optimized for Brave compatibility</p>
+                        </div>
+                      </>
+                    )}
                   </div>
                 ) : (
-                  <p className="text-blue-200 text-xs">Tap for sharing and download tips specific to Telegram</p>
+                  <p className={`text-xs ${
+                    telegramEnv.isTelegram ? 'text-blue-200' : 'text-orange-200'
+                  }`}>
+                    {telegramEnv.isTelegram 
+                      ? 'Tap for sharing and download tips specific to Telegram'
+                      : 'Tap for Brave browser sharing and download tips'
+                    }
+                  </p>
                 )}
               </div>
             </div>

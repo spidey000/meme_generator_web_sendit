@@ -1,7 +1,15 @@
 /**
  * System-wide share utilities with data URL fallbacks for restrictive environments like Telegram.
  * Works across Android, iOS, and desktop using native share mechanisms.
+ * Now includes enhanced Telegram bot integration for native sharing.
  */
+
+// Import Telegram bot utilities
+import { 
+  shareMemeWithBot, 
+  shouldUseBotSharing, 
+  initializeTelegramWebApp 
+} from './telegramBot';
 
 export type ShareImageOptions = {
   filename?: string;
@@ -28,9 +36,19 @@ export function getTelegramEnvironment(): {
   isIOS: boolean;
   isDesktop: boolean;
   platform: string;
+  isBrave: boolean;
+  userAgent: string;
 } {
   if (typeof navigator === "undefined") {
-    return { isTelegram: false, isAndroid: false, isIOS: false, isDesktop: false, platform: "unknown" };
+    return { 
+      isTelegram: false, 
+      isAndroid: false, 
+      isIOS: false, 
+      isDesktop: false, 
+      platform: "unknown",
+      isBrave: false,
+      userAgent: "unknown"
+    };
   }
   
   const ua = navigator.userAgent.toLowerCase();
@@ -38,22 +56,32 @@ export function getTelegramEnvironment(): {
   const isAndroid = ua.includes('android');
   const isIOS = /iphone|ipad|ipod/.test(ua);
   const isDesktop = !isAndroid && !isIOS;
+  const isBrave = ua.includes('brave');
   
   return {
     isTelegram,
     isAndroid,
     isIOS,
     isDesktop,
-    platform: isAndroid ? 'android' : isIOS ? 'ios' : isDesktop ? 'desktop' : 'unknown'
+    isBrave,
+    platform: isAndroid ? 'android' : isIOS ? 'ios' : isDesktop ? 'desktop' : 'unknown',
+    userAgent: ua.substring(0, 100) // Truncate for privacy
   };
 }
 
 /**
- * Enhanced restrictive environment detection
+ * Enhanced restrictive environment detection - more conservative to avoid false positives
  */
 function isRestrictiveEnvironment(): boolean {
   const env = getTelegramEnvironment();
-  return env.isTelegram || navigator.userAgent.toLowerCase().includes('webview');
+  const ua = navigator.userAgent.toLowerCase();
+  
+  // Only detect truly restrictive environments
+  return env.isTelegram || 
+         ua.includes('webview') ||
+         ua.includes('instagram') ||
+         ua.includes('facebook') ||
+         ua.includes('twitter');
 }
 
 /**
@@ -327,12 +355,43 @@ export async function shareImageBlob(
   // Log the initial share attempt
   logShareOperation('shareImageBlob started', env, {
     hasNavigatorShare,
+    isBrave: env.isBrave,
     blobSize: blob.size,
     blobType: blob.type,
     options: { filename, title, text: !!text, url: !!url }
   });
 
-  // For restrictive environments like Telegram, use system-wide share immediately
+  // Initialize Telegram Web App if available
+  if (env.isTelegram) {
+    initializeTelegramWebApp();
+  }
+
+  // For Telegram environments with bot support, use native bot sharing
+  if (env.isTelegram && shouldUseBotSharing()) {
+    logShareOperation('Telegram detected with bot support, using native sharing', env);
+    try {
+      await shareMemeWithBot(blob, {
+        filename,
+        title,
+        text,
+        url,
+        onProgress: (progress) => {
+          console.log(`Bot sharing progress: ${progress}%`);
+        },
+        onError: (error) => {
+          console.error('Bot sharing error:', error);
+        }
+      });
+      logShareOperation('Telegram bot share completed', env);
+      return;
+    } catch (error) {
+      logShareOperation('Telegram bot share failed, falling back to enhanced strategies', env, { error: error.message });
+      console.warn('Telegram bot share failed, falling back:', error);
+      // Fall through to enhanced strategies
+    }
+  }
+
+  // For restrictive environments like Telegram without bot support, use system-wide share
   if (env.isTelegram) {
     logShareOperation('Telegram detected, using enhanced strategies', env);
     try {
@@ -359,42 +418,81 @@ export async function shareImageBlob(
     }
   }
 
-  // Try Web Share API with files first (Level 2)
+  // Try Web Share API -优先处理标准浏览器
   if (hasNavigatorShare) {
+    logShareOperation('Web Share API available, attempting share', env, { isBrave });
+    
     try {
-      const file = new File([blob], filename, { type: blob.type || "image/png" });
-
-      // Try file sharing if supported
-      if (canShareFiles([file])) {
+      // 对于Brave浏览器，直接尝试text/url分享，因为文件分享可能不稳定
+      if (env.isBrave) {
+        logShareOperation('Brave detected, using text/url sharing', env);
         try {
-          await (navigator as Navigator).share({ files: [file], title, text, url });
+          await (navigator as Navigator).share({ title, text, url });
+          logShareOperation('Brave share completed successfully', env);
           return;
         } catch (err: unknown) {
           if (isAbortError(err)) return; // User cancelled
+          logShareOperation('Brave share failed, trying fallbacks', env, { error: err });
+        }
+      } else {
+        // 标准浏览器的完整流程
+        const file = new File([blob], filename, { type: blob.type || "image/png" });
+
+        // 尝试文件分享 (Level 2)
+        if (canShareFiles([file])) {
+          try {
+            await (navigator as Navigator).share({ files: [file], title, text, url });
+            logShareOperation('File share completed successfully', env);
+            return;
+          } catch (err: unknown) {
+            if (isAbortError(err)) return; // User cancelled
+            logShareOperation('File share failed, trying text/url', env, { error: err });
+          }
+        }
+
+        // 回退到text/url分享 (更兼容)
+        try {
+          await (navigator as Navigator).share({ title, text, url });
+          logShareOperation('Text/url share completed successfully', env);
+          return;
+        } catch (err: unknown) {
+          if (isAbortError(err)) return; // User cancelled
+          logShareOperation('Text/url share failed, trying fallbacks', env, { error: err });
         }
       }
-
-      // Fall back to text/url sharing (more compatible)
-      try {
-        await (navigator as Navigator).share({ title, text, url });
-        return;
-      } catch (err: unknown) {
-        if (isAbortError(err)) return; // User cancelled
-      }
-    } catch {
-      // Fall through to download fallback
+    } catch (err) {
+      logShareOperation('Web Share API completely failed, using fallbacks', env, { error: err });
+      // 继续到后备方案
     }
   }
 
-  // Final fallback: try system-wide share for any remaining cases
+  // 最终后备方案：处理剩余情况
+  logShareOperation('Using final fallback strategies', env, { isBrave: env.isBrave });
+  
   try {
-    await systemWideShareWithDataURL(blob, { filename, title, text, url, onFallback });
-    onFallback?.("system-wide-fallback");
-  } catch {
-    // Ultimate fallback: download the image
+    // 对于Brave浏览器，跳过系统级分享，直接下载
+    if (env.isBrave) {
+      logShareOperation('Brave detected, skipping system-wide share, using download', env);
+      await fallbackDownloadAndMaybeOpen(blob, filename, onFallback);
+      onFallback?.("brave-download");
+    } else {
+      // 其他浏览器尝试系统级分享
+      await systemWideShareWithDataURL(blob, { filename, title, text, url, onFallback });
+      onFallback?.("system-wide-fallback");
+    }
+    logShareOperation('Final fallback completed successfully', env);
+  } catch (error) {
+    logShareOperation('Final fallback failed, using ultimate fallback', env, { error: error?.message });
+    
+    // 终极后备方案：直接下载
     try {
       await fallbackDownloadAndMaybeOpen(blob, filename, onFallback);
-    } catch {
+      onFallback?.("download");
+      logShareOperation('Ultimate download fallback completed', env);
+    } catch (downloadError) {
+      logShareOperation('Download failed, using clipboard fallback', env, { error: downloadError?.message });
+      
+      // 最后的手段：复制到剪贴板
       if (text || url) {
         const composed = [text, url].filter(Boolean).join(" ");
         await tryWriteClipboardText(composed);
@@ -472,6 +570,7 @@ export function testShareFunctionality() {
     },
     compatibility: {
       telegramSupported: env.isTelegram,
+      braveSupported: env.isBrave,
       androidSupported: env.isAndroid,
       iosSupported: env.isIOS,
       desktopSupported: env.isDesktop

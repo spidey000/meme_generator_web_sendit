@@ -14,6 +14,7 @@ interface ShareDebuggerProps {
 const ShareDebugger: React.FC<ShareDebuggerProps> = ({ onTestComplete }) => {
   const env = getTelegramEnvironment();
   const [debugMode, setDebugMode] = React.useState(false);
+  const isBrave = env.isBrave;
 
   useEffect(() => {
     // Enable debug mode
@@ -99,6 +100,7 @@ const ShareDebugger: React.FC<ShareDebuggerProps> = ({ onTestComplete }) => {
         <div className="bg-gray-800 p-2 rounded">
           <p><strong>Platform:</strong> {env.platform}</p>
           <p><strong>Telegram:</strong> {env.isTelegram ? '✅' : '❌'}</p>
+          <p><strong>Brave:</strong> {env.isBrave ? '✅' : '❌'}</p>
           <p><strong>Debug Mode:</strong> {debugMode ? '✅' : '❌'}</p>
         </div>
         
