@@ -5,6 +5,7 @@ import { BRAND_COLORS, INITIAL_TEXT_LAYER, MAX_Z_INDEX, MIN_LAYER_DIMENSION, INI
 import MemeCanvas from './components/MemeCanvas';
 import Toolbar from './components/Toolbar';
 import MemeTemplateGallery from './components/MemeTemplateGallery';
+import ShareDebugger from './components/ShareDebugger';
 import html2canvas from 'html2canvas';
 import { CanvasExporter } from './utils/canvasExporter';
 
@@ -222,18 +223,25 @@ const App: React.FC = () => {
         link.href = dataURL;
         link.style.display = 'none';
         
-        // Check if we're in Android Telegram
-        const isAndroidTelegram = typeof navigator !== 'undefined' && 
-          /Telegram/i.test(navigator.userAgent) && /Android/i.test(navigator.userAgent);
+        // Enhanced Telegram detection and handling
+        const isTelegram = typeof navigator !== 'undefined' && /Telegram/i.test(navigator.userAgent);
+        const isAndroid = typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent);
+        const isIOS = typeof navigator !== 'undefined' && /iPhone|iPad|iPod/i.test(navigator.userAgent);
         
-        if (isAndroidTelegram) {
-          // For Android Telegram, use multiple strategies
+        console.log(`Download triggered - Telegram: ${isTelegram}, Android: ${isAndroid}, iOS: ${isIOS}`);
+        
+        if (isTelegram) {
+          console.log('Using enhanced Telegram download strategies');
+          
+          // Universal Telegram approach: data URL with instructions
           document.body.appendChild(link);
           
           // Try multiple click methods
           try {
             link.click();
+            console.log('Standard click method attempted');
           } catch (e) {
+            console.warn('Standard click failed, trying mouse event:', e);
             // Fallback: create mouse event
             const event = new MouseEvent('click', {
               view: window,
@@ -243,21 +251,48 @@ const App: React.FC = () => {
             link.dispatchEvent(event);
           }
           
-          // Additional fallback: redirect to data URL
+          // Telegram-specific fallbacks
           setTimeout(() => {
             try {
-              window.location.href = dataURL;
+              // For Android Telegram: try intent scheme
+              if (isAndroid) {
+                console.log('Trying Android intent scheme fallback');
+                const intentData = dataURL.split(',')[1]; // Get base64 data
+                const intentUrl = `intent://save/#Intent;action=android.intent.action.VIEW;type=image/jpeg;S.android.intent.extra.STREAM=${encodeURIComponent(dataURL)};end`;
+                window.location.href = intentUrl;
+              } else {
+                // For iOS/Desktop Telegram: open data URL directly
+                console.log('Opening data URL in new tab for Telegram');
+                window.open(dataURL, '_blank');
+              }
             } catch (e) {
-              // Final fallback: open new tab
+              console.warn('Intent scheme failed, falling back to direct open:', e);
+              // Final fallback: open new tab with data URL
               window.open(dataURL, '_blank');
             }
           }, 100);
           
+          // Clean up
           setTimeout(() => {
-            document.body.removeChild(link);
+            if (document.body.contains(link)) {
+              document.body.removeChild(link);
+            }
+          }, 500);
+          
+          // Show user guidance
+          setTimeout(() => {
+            if (isAndroid) {
+              alert('Download started! If the download doesn\'t appear, check your notifications or downloads folder.');
+            } else if (isIOS) {
+              alert('Image opened in new tab. Long press the image to save it to your photos.');
+            } else {
+              alert('Download started! Check your downloads folder or browser downloads.');
+            }
           }, 200);
+          
         } else {
           // Standard behavior for other browsers
+          console.log('Using standard download behavior');
           link.click();
         }
         
@@ -557,6 +592,9 @@ const App: React.FC = () => {
           )}
         </div>
       </header>
+
+      {/* Debug component for testing share functionality */}
+      {process.env.NODE_ENV === 'development' && <ShareDebugger />}
 
       <div className="flex flex-1 overflow-hidden flex-col md:flex-row">
         <Toolbar

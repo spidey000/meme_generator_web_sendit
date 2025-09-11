@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Layer, LayerType, TextLayerProps, StickerLayerProps, StickerOption } from '../types';
 import TextLayerEditor from './TextLayerEditor';
 import StickerLayerEditor from './StickerLayerEditor';
@@ -7,7 +7,7 @@ import StickerGallery from './StickerGallery';
 import LayerList from './LayerList';
 import { Button } from './common/Button';
 import { Icon } from './common/Icon';
-import { shareImageBlob, shareData } from '../utils/share';
+import { shareImageBlob, shareData, getTelegramEnvironment } from '../utils/share';
 
 interface ToolbarProps {
   id?: string;
@@ -43,10 +43,17 @@ const Toolbar: React.FC<ToolbarProps> = ({
   const [showStickerGallery, setShowStickerGallery] = useState(false);
   const [isEditorCollapsed, setIsEditorCollapsed] = useState(false);
   const [isToolbarContentVisible, setIsToolbarContentVisible] = useState(true);
+  const [telegramEnv, setTelegramEnv] = useState(getTelegramEnvironment());
+  const [showTelegramHelp, setShowTelegramHelp] = useState(false);
 
   // Flattened preview state
   const [flattenedPreviewUrl, setFlattenedPreviewUrl] = useState<string | null>(null);
   const [showFlattenedPreview, setShowFlattenedPreview] = useState(false);
+
+  // Update Telegram environment on mount and when user agent might change
+  useEffect(() => {
+    setTelegramEnv(getTelegramEnvironment());
+  }, []);
 
   const handleAddText = () => {
     if (!hasBaseImage) return;
@@ -76,12 +83,21 @@ const Toolbar: React.FC<ToolbarProps> = ({
     }
   };
 
-  // Simple share handler using Web Share API + basic fallbacks
-  const handleShareClick = async () => {
+  // Enhanced share handler with Telegram-specific feedback
+  const handleShareClick = async (event: React.MouseEvent<HTMLButtonElement>) => {
     if (!hasBaseImage) return;
+    
+    const env = getTelegramEnvironment();
+    console.log(`Share clicked - Telegram: ${env.isTelegram}, Platform: ${env.platform}`);
     
     try {
       const blob = await getImageBlob();
+      
+      // Show loading feedback
+      const originalText = event.currentTarget.textContent;
+      event.currentTarget.textContent = 'Sharing...';
+      event.currentTarget.disabled = true;
+      
       await shareImageBlob(blob, {
         filename: 'meme.png',
         title: 'Sendit Meme',
@@ -89,14 +105,32 @@ const Toolbar: React.FC<ToolbarProps> = ({
         url: window.location.href,
         onFallback: (reason) => {
           console.info('Share fallback:', reason);
+          // Show user feedback for fallback
+          if (env.isTelegram) {
+            setTimeout(() => {
+              alert(`Sharing via ${reason}. Check the new tab for your meme!`);
+            }, 500);
+          }
         }
       });
+      
     } catch (err: any) {
       if (err?.name === 'AbortError') {
         // User cancelled - no error needed
         return;
       }
       console.error('Share failed:', err);
+      
+      // Enhanced error handling for Telegram
+      if (env.isTelegram) {
+        alert('Share failed in Telegram. Try using the Download button instead and share manually!');
+      } else {
+        alert('Share failed. Please try again or use the Download button.');
+      }
+    } finally {
+      // Restore button state
+      event.currentTarget.textContent = originalText;
+      event.currentTarget.disabled = false;
     }
   };
 
@@ -150,6 +184,45 @@ const Toolbar: React.FC<ToolbarProps> = ({
       </div>
       
       <div id="toolbar-content" className={`${isToolbarContentVisible ? 'block' : 'hidden'} md:block space-y-3 md:space-y-6 flex-grow`}>
+        {/* Telegram User Guidance */}
+        {telegramEnv.isTelegram && (
+          <div className="bg-blue-900 bg-opacity-20 border border-blue-500 rounded-lg p-3 mb-4">
+            <div className="flex items-start space-x-2">
+              <div className="text-blue-400 flex-shrink-0 mt-0.5">
+                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                </svg>
+              </div>
+              <div className="flex-1">
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="text-blue-300 font-semibold text-sm">📱 Telegram User Guide</h4>
+                  <Button
+                    variant="icon"
+                    size="sm"
+                    onClick={() => setShowTelegramHelp(!showTelegramHelp)}
+                    className="text-blue-400 hover:text-blue-300"
+                  >
+                    <Icon path={showTelegramHelp ? "M5 15l7-7 7 7" : "M19 9l-7 7-7-7"} className="w-4 h-4" />
+                  </Button>
+                </div>
+                {showTelegramHelp ? (
+                  <div className="text-blue-200 text-xs space-y-2">
+                    <p><strong>Share Button:</strong> Opens image in new tab - long press to save/share</p>
+                    <p><strong>Download Button:</strong> May need to check notifications or use screenshot</p>
+                    <p><strong>💡 Pro Tip:</strong> Take a screenshot of your meme for quick sharing!</p>
+                    <div className="mt-2 p-2 bg-blue-800 bg-opacity-30 rounded text-xs">
+                      <p><strong>Platform:</strong> {telegramEnv.platform.toUpperCase()} Telegram</p>
+                      <p><strong>Status:</strong> Enhanced compatibility mode active</p>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-blue-200 text-xs">Tap for sharing and download tips specific to Telegram</p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+        
         <div className="space-y-2 sm:space-y-3">
           <h3 className="text-lg sm:text-xl font-semibold text-accent-green">Add Elements</h3>
 

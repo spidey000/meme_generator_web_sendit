@@ -1,6 +1,6 @@
 /**
- * Simple native share utilities focused on Web Share API + basic fallbacks.
- * OS-agnostic approach for maximum compatibility.
+ * System-wide share utilities with data URL fallbacks for restrictive environments like Telegram.
+ * Works across Android, iOS, and desktop using native share mechanisms.
  */
 
 export type ShareImageOptions = {
@@ -18,6 +18,43 @@ type ShareDataLite = {
 };
 
 const DEFAULT_FILENAME = "meme.png";
+
+/**
+ * Enhanced Telegram browser detection with platform identification
+ */
+export function getTelegramEnvironment(): {
+  isTelegram: boolean;
+  isAndroid: boolean;
+  isIOS: boolean;
+  isDesktop: boolean;
+  platform: string;
+} {
+  if (typeof navigator === "undefined") {
+    return { isTelegram: false, isAndroid: false, isIOS: false, isDesktop: false, platform: "unknown" };
+  }
+  
+  const ua = navigator.userAgent.toLowerCase();
+  const isTelegram = ua.includes('telegram') || ua.includes('tgweb');
+  const isAndroid = ua.includes('android');
+  const isIOS = /iphone|ipad|ipod/.test(ua);
+  const isDesktop = !isAndroid && !isIOS;
+  
+  return {
+    isTelegram,
+    isAndroid,
+    isIOS,
+    isDesktop,
+    platform: isAndroid ? 'android' : isIOS ? 'ios' : isDesktop ? 'desktop' : 'unknown'
+  };
+}
+
+/**
+ * Enhanced restrictive environment detection
+ */
+function isRestrictiveEnvironment(): boolean {
+  const env = getTelegramEnvironment();
+  return env.isTelegram || navigator.userAgent.toLowerCase().includes('webview');
+}
 
 /**
  * Checks if the browser can share files (Web Share API Level 2).
@@ -72,6 +109,185 @@ function forceDownload(url: string, filename: string): void {
 }
 
 /**
+ * Enhanced system-wide share using data URL for restrictive environments
+ */
+async function systemWideShareWithDataURL(blob: Blob, options: ShareImageOptions): Promise<void> {
+  const filename = options?.filename ?? DEFAULT_FILENAME;
+  const title = options?.title;
+  const text = options?.text;
+  const url = options?.url;
+  const onFallback = options?.onFallback;
+  const env = getTelegramEnvironment();
+
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const dataURL = reader.result as string;
+      
+      // Try different system-wide approaches based on platform
+      const strategies = [
+        // 1. Telegram-specific strategies
+        () => {
+          if (env.isTelegram) {
+            console.log('Telegram detected, using Telegram-specific strategies');
+            
+            // Android Telegram: Enhanced intent handling
+            if (env.isAndroid) {
+              try {
+                const shareText = encodeURIComponent(text || title || '');
+                const shareUrl = encodeURIComponent(url || '');
+                const intentUrl = `intent://share/#Intent;action=android.intent.action.SEND;type=image/png;S.android.intent.extra.TEXT=${shareText};S.android.intent.extra.SUBJECT=${encodeURIComponent(title || '')};end`;
+                window.location.href = intentUrl;
+                return true;
+              } catch (e) {
+                console.warn('Android intent failed:', e);
+              }
+            }
+            
+            // iOS/Desktop Telegram: Direct image preview
+            const newWindow = window.open('', '_blank');
+            if (newWindow) {
+              newWindow.document.write(`
+                <html>
+                  <head><title>${title || 'Share Image'}</title>
+                  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                  <style>
+                    body { margin:0; padding:20px; text-align:center; font-family:-apple-system,BlinkMacSystemFont,sans-serif; background:#f5f5f5; }
+                    .container { max-width:600px; margin:0 auto; background:white; padding:30px; border-radius:12px; box-shadow:0 4px6px rgba(0,0,0,0.1); }
+                    h2 { color:#333; margin-bottom:10px; }
+                    .instructions { color:#666; margin-bottom:20px; font-size:16px; }
+                    .image-container { margin:20px 0; }
+                    img { max-width:100%; max-height:60vh; border:2px solid #e0e0e0; border-radius:8px; }
+                    .telegram-hint { background:#0088cc; color:white; padding:15px; border-radius:8px; margin-top:20px; font-size:14px; }
+                    .save-hint { background:#4CAF50; color:white; padding:15px; border-radius:8px; margin-top:10px; font-size:14px; }
+                  </style>
+                  </head>
+                  <body>
+                    <div class="container">
+                      <h2>${title || 'Share this image'}</h2>
+                      <p class="instructions">${text || 'Long press the image to save and share'}</p>
+                      <div class="image-container">
+                        <img src="${dataURL}" alt="Generated meme" />
+                      </div>
+                      <div class="telegram-hint">
+                        <strong>📱 Telegram Users:</strong><br>
+                        Long press the image above and select "Save to Gallery" or "Share"
+                      </div>
+                      <div class="save-hint">
+                        <strong>💾 Alternative:</strong><br>
+                        Take a screenshot of the image and share it from your gallery
+                      </div>
+                      ${url ? `<p style="margin-top:20px;color:#999;font-size:12px;">Original: ${url}</p>` : ''}
+                    </div>
+                  </body>
+                </html>
+              `);
+              return true;
+            }
+          }
+          return false;
+        },
+        
+        // 2. Android intent:// scheme (for non-Telegram Android)
+        () => {
+          if (!env.isTelegram && /android/i.test(navigator.userAgent)) {
+            const shareText = encodeURIComponent(text || title || '');
+            const shareUrl = encodeURIComponent(url || '');
+            const intentUrl = `intent://share/#Intent;action=android.intent.action.SEND;type=image/png;S.android.intent.extra.TEXT=${shareText};S.android.intent.extra.SUBJECT=${encodeURIComponent(title || '')};end`;
+            window.location.href = intentUrl;
+            return true;
+          }
+          return false;
+        },
+        
+        // 3. Universal share link
+        () => {
+          const shareData = {
+            title: title || '',
+            text: text || '',
+            url: url || '',
+            image: dataURL
+          };
+          
+          // Create a shareable data URL that includes all share info
+          const shareDataURL = `data:text/json;base64,${btoa(JSON.stringify(shareData))}`;
+          window.open(shareDataURL, '_blank');
+          return true;
+        },
+        
+        // 4. Direct image open with share instructions
+        () => {
+          // Open image in new tab with instructions
+          const newWindow = window.open('', '_blank');
+          if (newWindow) {
+            newWindow.document.write(`
+              <html>
+                <head><title>${title || 'Share Image'}</title>
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <style>
+                  body { margin:0; padding:20px; text-align:center; font-family:-apple-system,BlinkMacSystemFont,sans-serif; background:#f5f5f5; }
+                  .container { max-width:600px; margin:0 auto; background:white; padding:30px; border-radius:12px; box-shadow:0 4px6px rgba(0,0,0,0.1); }
+                  h2 { color:#333; margin-bottom:10px; }
+                  .instructions { color:#666; margin-bottom:20px; font-size:16px; }
+                  .image-container { margin:20px 0; }
+                  img { max-width:100%; max-height:60vh; border:2px solid #e0e0e0; border-radius:8px; }
+                  .save-hint { background:#2196F3; color:white; padding:15px; border-radius:8px; margin-top:20px; font-size:14px; }
+                </style>
+                </head>
+                <body>
+                  <div class="container">
+                    <h2>${title || 'Share this image'}</h2>
+                    <p class="instructions">${text || 'Long press to save and share'}</p>
+                    <div class="image-container">
+                      <img src="${dataURL}" alt="Generated meme" />
+                    </div>
+                    <div class="save-hint">
+                      <strong>💾 How to save:</strong><br>
+                      Long press the image and select "Save Image" or take a screenshot
+                    </div>
+                    ${url ? `<p style="margin-top:20px;color:#999;font-size:12px;">Original: ${url}</p>` : ''}
+                  </div>
+                </body>
+              </html>
+            `);
+            return true;
+          }
+          return false;
+        },
+        
+        // 5. Fallback to download
+        () => {
+          forceDownload(dataURL, filename);
+          onFallback?.("download");
+          return true;
+        }
+      ];
+
+      // Try each strategy until one works
+      for (let i = 0; i < strategies.length; i++) {
+        const strategy = strategies[i];
+        try {
+          console.log(`Attempting share strategy ${i + 1}/${strategies.length}`);
+          if (strategy()) {
+            console.log(`Share strategy ${i + 1} succeeded`);
+            setTimeout(resolve, 500); // Give it time to work
+            return;
+          }
+        } catch (e) {
+          console.warn(`Share strategy ${i + 1} failed:`, e);
+          // Continue to next strategy
+        }
+      }
+      
+      reject(new Error('All share strategies failed'));
+    };
+    
+    reader.onerror = () => reject(new Error('Failed to read blob'));
+    reader.readAsDataURL(blob);
+  });
+}
+
+/**
  * Simple fallback: download the image file
  */
 async function fallbackDownloadAndMaybeOpen(
@@ -91,8 +307,9 @@ async function fallbackDownloadAndMaybeOpen(
 
 /**
  * shareImageBlob
- * Uses Web Share API with file sharing when available, falls back to download.
- * OS-agnostic approach that works across Android, iOS, and desktop.
+ * Uses system-wide sharing strategies for restrictive environments (Telegram), 
+ * Web Share API when available, and multiple fallback mechanisms.
+ * Works across Android, iOS, and desktop even when Web APIs are blocked.
  */
 export async function shareImageBlob(
   blob: Blob,
@@ -105,6 +322,42 @@ export async function shareImageBlob(
   const onFallback = options?.onFallback;
 
   const hasNavigatorShare = typeof navigator !== "undefined" && !!(navigator as Navigator).share;
+  const env = getTelegramEnvironment();
+  
+  // Log the initial share attempt
+  logShareOperation('shareImageBlob started', env, {
+    hasNavigatorShare,
+    blobSize: blob.size,
+    blobType: blob.type,
+    options: { filename, title, text: !!text, url: !!url }
+  });
+
+  // For restrictive environments like Telegram, use system-wide share immediately
+  if (env.isTelegram) {
+    logShareOperation('Telegram detected, using enhanced strategies', env);
+    try {
+      await systemWideShareWithDataURL(blob, { filename, title, text, url, onFallback });
+      onFallback?.("telegram-enhanced");
+      logShareOperation('Telegram-enhanced share completed', env);
+      return;
+    } catch (error) {
+      logShareOperation('Telegram-enhanced share failed, falling back', env, { error: error.message });
+      console.warn('Telegram-enhanced share failed, falling back:', error);
+      // Fall through to standard methods
+    }
+  } else if (isRestrictiveEnvironment()) {
+    logShareOperation('Other restrictive environment detected', env);
+    try {
+      await systemWideShareWithDataURL(blob, { filename, title, text, url, onFallback });
+      onFallback?.("system-wide");
+      logShareOperation('System-wide share completed', env);
+      return;
+    } catch (error) {
+      logShareOperation('System-wide share failed, falling back', env, { error: error.message });
+      console.warn('System-wide share failed, falling back:', error);
+      // Fall through to standard methods
+    }
+  }
 
   // Try Web Share API with files first (Level 2)
   if (hasNavigatorShare) {
@@ -133,17 +386,22 @@ export async function shareImageBlob(
     }
   }
 
-  // Simple fallback: download the image
+  // Final fallback: try system-wide share for any remaining cases
   try {
-    await fallbackDownloadAndMaybeOpen(blob, filename, onFallback);
+    await systemWideShareWithDataURL(blob, { filename, title, text, url, onFallback });
+    onFallback?.("system-wide-fallback");
   } catch {
-    // Final fallback: copy text to clipboard
-    if (text || url) {
-      const composed = [text, url].filter(Boolean).join(" ");
-      await tryWriteClipboardText(composed);
-      onFallback?.("clipboard");
-    } else {
-      onFallback?.("none");
+    // Ultimate fallback: download the image
+    try {
+      await fallbackDownloadAndMaybeOpen(blob, filename, onFallback);
+    } catch {
+      if (text || url) {
+        const composed = [text, url].filter(Boolean).join(" ");
+        await tryWriteClipboardText(composed);
+        onFallback?.("clipboard");
+      } else {
+        onFallback?.("none");
+      }
     }
   }
 }
@@ -174,6 +432,54 @@ export async function shareData(options: ShareDataLite): Promise<void> {
     const composed = [title, text].filter(Boolean).join(" ");
     await tryWriteClipboardText(composed); // Copy to clipboard
   }
+}
+
+/**
+ * Enhanced debugging utility for share operations
+ */
+function logShareOperation(operation: string, env: any, details?: any) {
+  const isDebugMode = typeof window !== 'undefined' && (window as any).DEBUG_TELEGRAM_SHARE;
+  
+  if (isDebugMode) {
+    console.log(`[Share Debug] ${operation}:`, {
+      platform: env.platform,
+      isTelegram: env.isTelegram,
+      userAgent: navigator.userAgent.substring(0, 100),
+      timestamp: new Date().toISOString(),
+      ...details
+    });
+  }
+  
+  // Always log critical errors
+  if (details?.error) {
+    console.error(`[Share Error] ${operation}:`, details.error);
+  }
+}
+
+/**
+ * Test utility to validate share functionality
+ */
+export function testShareFunctionality() {
+  const env = getTelegramEnvironment();
+  const results = {
+    environment: env,
+    features: {
+      hasNavigatorShare: typeof navigator !== "undefined" && !!(navigator as Navigator).share,
+      hasClipboard: typeof navigator !== "undefined" && !!(navigator as any).clipboard,
+      hasBlobSupport: typeof Blob !== "undefined",
+      hasFileReader: typeof FileReader !== "undefined",
+      hasURLSupport: typeof URL !== "undefined"
+    },
+    compatibility: {
+      telegramSupported: env.isTelegram,
+      androidSupported: env.isAndroid,
+      iosSupported: env.isIOS,
+      desktopSupported: env.isDesktop
+    }
+  };
+  
+  console.log('[Share Test Results]', results);
+  return results;
 }
 
 /**
