@@ -7,6 +7,7 @@ import StickerGallery from './StickerGallery';
 import LayerList from './LayerList';
 import { Button } from './common/Button';
 import { Icon } from './common/Icon';
+import { shareImageBlob, shareData } from '../utils/share';
 
 interface ToolbarProps {
   id?: string;
@@ -75,35 +76,28 @@ const Toolbar: React.FC<ToolbarProps> = ({
     }
   };
 
-  // Share handler using Web Share API Level 2 with files, fallback to download
+  // Share handler using centralized robust share utility with native-first + graceful fallbacks
   const handleShareClick = async () => {
     if (!hasBaseImage) return;
     try {
       const blob = await getImageBlob();
-      const file = new File([blob], 'meme.png', { type: 'image/png' });
-      const canShareFiles =
-        typeof navigator !== 'undefined' &&
-        'share' in navigator &&
-        'canShare' in navigator &&
-        (navigator as any).canShare({ files: [file] });
-
-      if (canShareFiles) {
-        await (navigator as any).share({
-          files: [file],
-          title: 'Sendit Meme',
-          text: 'Check out this meme!',
-        });
-        return;
-      }
-      // Fallback to download if file sharing not supported
-      onDownloadMeme();
+      await shareImageBlob(blob, {
+        filename: 'meme.png',
+        title: 'Sendit Meme',
+        text: 'Made with Sendit Meme Generator',
+        url: window.location.href,
+        onFallback: (reason) => {
+          // Non-blocking notice of fallback path (keep UX minimal)
+          console.info('Share fallback:', reason);
+        }
+      });
     } catch (err: any) {
       if (err && err.name === 'AbortError') {
-        // User canceled share; silently ignore
+        // User canceled share; no fallback cascade
         return;
       }
+      // The share utility already attempted fallbacks; just log here.
       console.error('Share failed:', err);
-      onDownloadMeme();
     }
   };
 

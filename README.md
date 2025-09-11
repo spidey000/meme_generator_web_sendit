@@ -30,6 +30,39 @@ sendit memgen is a dynamic React-based web application that empowers users to cr
 *   **Interactive Toolbar**: Centralized controls for adding and editing layers.
 *   **Layer List**: View and select from a list of all active layers.
 
+## Sharing
+
+Overview
+- The app prefers native mobile sharing on Android and iPhone where supported, and provides resilient fallbacks across environments (Telegram in-app browser, desktop). Sharing aims to deliver the generated image via the native share sheet when possible and gracefully fall back to download or clipboard strategies when not.
+
+Implementation references
+- Central share utility: [`utils/share.ts`](utils/share.ts)
+- Toolbar integration: [`components/Toolbar.tsx`](components/Toolbar.tsx)
+
+Behavior: feature detection and fallbacks
+- Telegram in-app webview: detected and native share attempts are skipped; the image blob is opened directly (new tab) and a download is triggered.
+- Web Share API Level 2 with files (capable Android browsers): the share-with-file attempt runs first.
+- iOS and Safari variations: when file attachments are rejected, a text/url-only share is attempted as a fallback.
+- If native share is unavailable or blocked: the image is opened in a new tab (best-effort) and a download trigger runs; if that fails, the code attempts to copy image URL or descriptive text to the clipboard when available.
+- User cancellation of the native share sheet does not trigger fallback behavior.
+
+Known limitations and platform notes
+- Older iOS Safari may expose share APIs but reject files, so images might not attach natively; the text/url-only path is used instead.
+- Telegram in-app browser typically blocks native share; expect a download prompt or new-tab behavior rather than a share sheet.
+- Desktop browsers often lack native file-share support; expect download or clipboard fallbacks.
+- Popup blockers can prevent opening a new tab; the automatic download attempt still runs in most environments.
+
+Testing guide
+- Quick checklist (trigger the Share button from the toolbar after creating a meme):
+  - Android Chrome: expect native share sheet with the image attached.
+  - iOS Safari (recent versions): expect a share sheet; attached files may be rejected but text/url-only path should still succeed.
+  - Telegram in-app browser: expect a direct download prompt or a new tab with the image; native share is usually unavailable.
+  - Desktop Chrome/Firefox/Safari: expect download behavior; clipboard fallback when only text/url is available.
+
+Troubleshooting
+- If tapping Share does nothing on iOS, ensure it was a user gesture and that popup blockers allow opening tabs; the download fallback still runs in most cases.
+- If the native share sheet appears then closes immediately, this is likely a user cancel event and no fallback will run by design.
+- If the clipboard fallback fails, it may be due to permissions; interact with the page first and retry.
 ## Tech Stack
 
 *   **React 19**: For building the user interface.
