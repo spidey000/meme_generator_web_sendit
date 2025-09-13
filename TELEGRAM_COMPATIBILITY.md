@@ -54,13 +54,6 @@ export function getTelegramEnvironment(): {
 - Real-time environment detection
 - Enhanced error messages and feedback
 
-### 5. Debug Tools (`components/ShareDebugger.tsx`)
-
-**Development Features:**
-- Real-time environment testing
-- Share/download functionality testing
-- Debug mode toggle
-- Comprehensive logging
 
 ## Technical Details
 
@@ -102,23 +95,6 @@ export function getTelegramEnvironment(): {
 
 ## Testing
 
-### Debug Mode
-Enable debug mode by toggling the debugger component or setting:
-```javascript
-window.DEBUG_TELEGRAM_SHARE = true;
-```
-
-### Test Functions
-```javascript
-// Run comprehensive tests
-import { testShareFunctionality } from './utils/share';
-testShareFunctionality();
-
-// Test environment detection
-import { getTelegramEnvironment } from './utils/share';
-const env = getTelegramEnvironment();
-console.log(env);
-```
 
 ## Usage
 
@@ -130,8 +106,6 @@ console.log(env);
 
 ### For Developers
 - Use `getTelegramEnvironment()` to detect Telegram platform
-- Enable debug mode for development testing
-- Use ShareDebugger component for testing
 - Monitor console logs for detailed operation tracking
 
 ## Browser Support
@@ -158,7 +132,6 @@ console.log(env);
 1. `utils/share.ts` - Enhanced share functionality with Telegram detection
 2. `components/Toolbar.tsx` - Added user guidance and improved error handling
 3. `App.tsx` - Enhanced download functionality with platform detection
-4. `components/ShareDebugger.tsx` - Debug component for testing (new file)
 
 ## Performance Considerations
 
@@ -185,4 +158,3 @@ console.log(env);
 - [ ] Desktop Telegram download functionality
 - [ ] Standard browser compatibility
 - [ ] Error handling and user feedback
-- [ ] Debug mode functionality

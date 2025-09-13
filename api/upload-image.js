@@ -46,9 +46,9 @@ module.exports = async (req, res) => {
       const uniqueId = Date.now() + '-' + Math.random().toString(36).substr(2, 9);
       const filename = `meme-${uniqueId}.png`;
       
-      // For Vercel deployment, we'll use the /tmp directory
-      // In production, you might want to use Vercel Blob or other storage
-      const uploadDir = '/tmp/uploads';
+      // For Vercel deployment, use public directory for static file serving
+      // This allows Vercel to serve the files statically
+      const uploadDir = path.join(process.cwd(), 'public', 'uploads');
       
       // Ensure directory exists
       if (!fs.existsSync(uploadDir)) {
@@ -59,8 +59,11 @@ module.exports = async (req, res) => {
       const filePath = path.join(uploadDir, filename);
       fs.renameSync(req.file.path, filePath);
 
-      // Create a public URL (for Vercel, this will be relative)
-      const publicUrl = `/uploads/${filename}`;
+      // Create a public URL that works with Vercel static serving
+      const baseUrl = process.env.VERCEL_URL 
+        ? `https://${process.env.VERCEL_URL}`
+        : 'http://localhost:5173';
+      const publicUrl = `${baseUrl}/uploads/${filename}`;
 
       console.log('Image uploaded successfully:', {
         filename,
