@@ -76,14 +76,34 @@ module.exports = async (req, res) => {
       const uniqueId = Date.now() + '-' + Math.random().toString(36).substr(2, 9);
       const filename = `meme-${uniqueId}.png`;
       
-      // For Vercel deployment, use public directory for static file serving
-      // This allows Vercel to serve the files statically
-      const uploadDir = path.join(process.cwd(), 'public', 'uploads');
+      // For Vercel deployment, use /tmp directory which is writable in serverless functions
+      // Note: Files in /tmp are ephemeral and will be lost between function invocations
+      const uploadDir = '/tmp/uploads';
+      
+      // Add diagnostic logging
+      logger.debug('Directory creation attempt', {
+        cwd: process.cwd(),
+        uploadDir,
+        writableDir: '/tmp',
+        env: process.env.NODE_ENV || 'development',
+        isVercel: !!process.env.VERCEL
+      });
       
       // Ensure directory exists
       if (!fs.existsSync(uploadDir)) {
         logger.debug('Creating uploads directory', { uploadDir });
-        fs.mkdirSync(uploadDir, { recursive: true });
+        try {
+          fs.mkdirSync(uploadDir, { recursive: true });
+          logger.info('Directory created successfully', { uploadDir });
+        } catch (dirError) {
+          logger.error('Directory creation failed', {
+            error: dirError.message,
+            uploadDir,
+            code: dirError.code,
+            stack: dirError.stack
+          });
+          throw dirError;
+        }
       }
 
       // Move the file to our uploads directory
@@ -95,11 +115,15 @@ module.exports = async (req, res) => {
       
       fs.renameSync(req.file.path, filePath);
 
-      // Create a public URL that works with Vercel static serving
+      // Create a public URL - files in /tmp need to be served through the API
+      // since Vercel can't serve files from /tmp directory
       const baseUrl = process.env.VERCEL_URL
         ? `https://${process.env.VERCEL_URL}`
         : 'http://localhost:5173';
-      const publicUrl = `${baseUrl}/uploads/${filename}`;
+      
+      // For Vercel deployment, we need to serve files through a dedicated API endpoint
+      // since files are stored in /tmp and not in the static public directory
+      const publicUrl = `${baseUrl}/api/serve-upload/${filename}`;
 
       logger.logBotOperation('image_upload', {
         success: true,

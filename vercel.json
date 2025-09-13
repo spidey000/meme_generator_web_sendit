@@ -4,16 +4,16 @@
     {
       "source": "/api/(.*)",
       "destination": "/api/$1"
-    },
-    {
-      "source": "/uploads/(.*)",
-      "destination": "/public/uploads/$1"
     }
   ],
   "functions": {
     "api/upload-image.js": {
       "maxDuration": 30,
       "memory": 1024
+    },
+    "api/serve-upload.js": {
+      "maxDuration": 10,
+      "memory": 512
     },
     "api/prepare-message.js": {
       "maxDuration": 10,
