@@ -1,5 +1,5 @@
 {
-  "name": "Sendit Meme Generator",
+  "name": "sendit memgen",
   "description": "A React application to create memes by adding text and stickers to images, styled with a dark, neon-green theme. Users can upload a base image, add customizable text elements (font, color, outline, shadow, glow), and place resizable/rotatable stickers from a predefined list or by uploading their own. Layers can be selected and edited in real-time.",
   "requestFramePermissions": [],
   "prompt": ""

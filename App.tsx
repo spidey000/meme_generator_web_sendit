@@ -5,7 +5,9 @@ import { BRAND_COLORS, INITIAL_TEXT_LAYER, MAX_Z_INDEX, MIN_LAYER_DIMENSION, INI
 import MemeCanvas from './components/MemeCanvas';
 import Toolbar from './components/Toolbar';
 import MemeTemplateGallery from './components/MemeTemplateGallery';
+import ShareDebugger from './components/ShareDebugger';
 import html2canvas from 'html2canvas';
+import { CanvasExporter } from './utils/canvasExporter';
 
 
 const App: React.FC = () => {
@@ -167,37 +169,204 @@ const App: React.FC = () => {
 
   const selectedLayer = layers.find(layer => layer.id === selectedLayerId) || null;
 
-  const handleExportMeme = () => {
-    setSelectedLayerId(null); 
-    requestAnimationFrame(() => {
-      if (memeCanvasRef.current) { // This ref is on MemeCanvas component's outer div
-        const canvasAreaToCapture = memeCanvasRef.current.querySelector('#meme-canvas-interactive-area'); // Target specific inner div
-        if (canvasAreaToCapture) {
-            html2canvas(canvasAreaToCapture as HTMLElement, { 
-              useCORS: true,
-              backgroundColor: BRAND_COLORS.primaryBg,
-              scale: window.devicePixelRatio * 1.5, 
-              logging: false,
-              removeContainer: true,
-              onclone: (documentClone) => {
-                documentClone.querySelectorAll('.interaction-handle').forEach(el => (el as HTMLElement).style.display = 'none');
-                documentClone.querySelectorAll('.layer-selected-outline').forEach(el => (el as HTMLElement).style.border = 'none');
-              }
-            }).then(canvas => {
-              const image = canvas.toDataURL('image/jpeg', 0.9);
-              const link = document.createElement('a');
-              link.download = `sendit-fun-${Date.now()}.jpg`;
-              link.href = image;
-              link.click();
-            }).catch(err => {
-              console.error("Error generating meme:", err);
-              alert("Sorry, there was an error generating your meme.");
-            });
-        } else {
-             console.error("Could not find #meme-canvas-interactive-area to capture.");
-        }
+  const handleExportMeme = async () => {
+    try {
+      setSelectedLayerId(null);
+      
+      // Wait for UI to update
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      if (!baseImage) {
+        alert("Please add a base image before exporting.");
+        return;
       }
-    });
+
+      // Load base image
+      const baseImageElement = new Image();
+      baseImageElement.crossOrigin = 'anonymous';
+      
+      await new Promise((resolve, reject) => {
+        baseImageElement.onload = resolve;
+        baseImageElement.onerror = reject;
+        baseImageElement.src = baseImage;
+      });
+
+      // Get canvas dimensions
+      const canvasArea = memeCanvasRef.current?.querySelector('#meme-canvas-interactive-area');
+      if (!canvasArea) {
+        throw new Error('Could not find canvas area');
+      }
+
+      const rect = canvasArea.getBoundingClientRect();
+      const width = rect.width;
+      const height = rect.height;
+
+      // Use canvas exporter (unified pipeline)
+      const exporter = new CanvasExporter();
+      
+      try {
+        const dataURL = await exporter.exportToDataURL(
+          baseImageElement,
+          layers,
+          width,
+          height,
+          {
+            format: 'image/jpeg',
+            quality: 0.9,
+            targetScale: window.devicePixelRatio || 1
+          }
+        );
+
+        // Create download link with Android Telegram compatibility
+        const link = document.createElement('a');
+        link.download = `sendit-fun-${Date.now()}.jpg`;
+        link.href = dataURL;
+        link.style.display = 'none';
+        
+        // Enhanced Telegram detection and handling
+        const isTelegram = typeof navigator !== 'undefined' && /Telegram/i.test(navigator.userAgent);
+        const isAndroid = typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent);
+        const isIOS = typeof navigator !== 'undefined' && /iPhone|iPad|iPod/i.test(navigator.userAgent);
+        
+        console.log(`Download triggered - Telegram: ${isTelegram}, Android: ${isAndroid}, iOS: ${isIOS}`);
+        
+        if (isTelegram) {
+          console.log('Using enhanced Telegram download strategies');
+          
+          // Universal Telegram approach: data URL with instructions
+          document.body.appendChild(link);
+          
+          // Try multiple click methods
+          try {
+            link.click();
+            console.log('Standard click method attempted');
+          } catch (e) {
+            console.warn('Standard click failed, trying mouse event:', e);
+            // Fallback: create mouse event
+            const event = new MouseEvent('click', {
+              view: window,
+              bubbles: true,
+              cancelable: true
+            });
+            link.dispatchEvent(event);
+          }
+          
+          // Telegram-specific fallbacks
+          setTimeout(() => {
+            try {
+              // For Android Telegram: try intent scheme
+              if (isAndroid) {
+                console.log('Trying Android intent scheme fallback');
+                const intentData = dataURL.split(',')[1]; // Get base64 data
+                const intentUrl = `intent://save/#Intent;action=android.intent.action.VIEW;type=image/jpeg;S.android.intent.extra.STREAM=${encodeURIComponent(dataURL)};end`;
+                window.location.href = intentUrl;
+              } else {
+                // For iOS/Desktop Telegram: open data URL directly
+                console.log('Opening data URL in new tab for Telegram');
+                window.open(dataURL, '_blank');
+              }
+            } catch (e) {
+              console.warn('Intent scheme failed, falling back to direct open:', e);
+              // Final fallback: open new tab with data URL
+              window.open(dataURL, '_blank');
+            }
+          }, 100);
+          
+          // Clean up
+          setTimeout(() => {
+            if (document.body.contains(link)) {
+              document.body.removeChild(link);
+            }
+          }, 500);
+          
+          // Show user guidance
+          setTimeout(() => {
+            if (isAndroid) {
+              alert('Download started! If the download doesn\'t appear, check your notifications or downloads folder.');
+            } else if (isIOS) {
+              alert('Image opened in new tab. Long press the image to save it to your photos.');
+            } else {
+              alert('Download started! Check your downloads folder or browser downloads.');
+            }
+          }, 200);
+          
+        } else {
+          // Standard behavior for other browsers
+          console.log('Using standard download behavior');
+          link.click();
+        }
+        
+        exporter.dispose();
+      } catch (exportError) {
+        exporter.dispose();
+        throw exportError;
+      }
+      
+    } catch (err) {
+      console.error("Error generating meme:", err);
+      alert("Sorry, there was an error generating your meme. Please try again.");
+    }
+  };
+
+  // Returns a PNG Blob of the current meme (used for Web Share API)
+  const getImageBlob = async (): Promise<Blob> => {
+    try {
+      setSelectedLayerId(null);
+      
+      // Wait for UI to update
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      if (!baseImage) {
+        throw new Error('Please add a base image before sharing.');
+      }
+
+      // Load base image
+      const baseImageElement = new Image();
+      baseImageElement.crossOrigin = 'anonymous';
+      
+      await new Promise((resolve, reject) => {
+        baseImageElement.onload = resolve;
+        baseImageElement.onerror = reject;
+        baseImageElement.src = baseImage;
+      });
+
+      // Get canvas dimensions
+      const canvasArea = memeCanvasRef.current?.querySelector('#meme-canvas-interactive-area');
+      if (!canvasArea) {
+        throw new Error('Could not find canvas area');
+      }
+
+      const rect = canvasArea.getBoundingClientRect();
+      const width = rect.width;
+      const height = rect.height;
+
+      // Use canvas exporter (unified pipeline)
+      const exporter = new CanvasExporter();
+      
+      try {
+        const blob = await exporter.exportToBlob(
+          baseImageElement,
+          layers,
+          width,
+          height,
+          {
+            format: 'image/png',
+            quality: 1.0,
+            targetScale: window.devicePixelRatio || 1
+          }
+        );
+        
+        exporter.dispose();
+        return blob;
+      } catch (exportError) {
+        exporter.dispose();
+        throw exportError;
+      }
+      
+    } catch (error) {
+      console.error('Error generating image blob:', error);
+      throw new Error('Failed to generate image for sharing');
+    }
   };
 
   const handleInteractionStart = useCallback(
@@ -395,7 +564,7 @@ const App: React.FC = () => {
   return (
     <div className="flex flex-col h-screen bg-primary-bg text-text-white font-sans">
       <header className="p-3 sm:p-4 bg-brand-black shadow-md flex justify-between items-center border-b-2 border-accent-green">
-        <h1 className="text-2xl sm:text-3xl font-bold text-accent-green">SENDIT.MEME</h1>
+        <h1 className="text-2xl sm:text-3xl font-bold text-accent-green">sendit memgen</h1>
         <div className="flex items-center space-x-2 sm:space-x-3">
           <button
             onClick={() => setShowMemeTemplateGallery(true)}
@@ -424,6 +593,9 @@ const App: React.FC = () => {
         </div>
       </header>
 
+      {/* Debug component for testing share functionality */}
+      {process.env.NODE_ENV === 'development' && <ShareDebugger />}
+
       <div className="flex flex-1 overflow-hidden flex-col md:flex-row">
         <Toolbar
           id="toolbar"
@@ -437,6 +609,8 @@ const App: React.FC = () => {
           onSendToBack={sendToBack}
           hasBaseImage={!!baseImage}
           stickers={dynamicStickers}
+          getImageBlob={getImageBlob}
+          onDownloadMeme={handleExportMeme}
         />
         <main ref={mainCanvasAreaRef} className="flex-1 p-2 sm:p-4 md:p-6 flex justify-center items-center overflow-auto bg-primary-bg relative">
           {baseImage ? (

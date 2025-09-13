@@ -1,9 +1,8 @@
-
-# Sendit Meme Generator
+# sendit memgen
 
 ## Overview
 
-The Sendit Meme Generator is a dynamic React-based web application that empowers users to create engaging memes. Users can upload a base image, choose from a gallery of popular meme templates, and then enhance their selection by adding customizable text elements and vibrant stickers. The application offers a rich set of tools for manipulating these layers, including moving, resizing, rotating, and managing their order. Styled with a sleek dark theme and neon green accents using Tailwind CSS, it provides an intuitive and visually appealing user experience.
+sendit memgen is a dynamic React-based web application that empowers users to create engaging memes. Users can upload a base image, choose from a gallery of popular meme templates, and then enhance their selection by adding customizable text elements and vibrant stickers. The application offers a rich set of tools for manipulating these layers, including moving, resizing, rotating, and managing their order. Styled with a sleek dark theme and neon green accents using Tailwind CSS, it provides an intuitive and visually appealing user experience.
 
 ## Features
 
@@ -31,6 +30,39 @@ The Sendit Meme Generator is a dynamic React-based web application that empowers
 *   **Interactive Toolbar**: Centralized controls for adding and editing layers.
 *   **Layer List**: View and select from a list of all active layers.
 
+## Sharing
+
+Overview
+- The app prefers native mobile sharing on Android and iPhone where supported, and provides resilient fallbacks across environments (Telegram in-app browser, desktop). Sharing aims to deliver the generated image via the native share sheet when possible and gracefully fall back to download or clipboard strategies when not.
+
+Implementation references
+- Central share utility: [`utils/share.ts`](utils/share.ts)
+- Toolbar integration: [`components/Toolbar.tsx`](components/Toolbar.tsx)
+
+Behavior: feature detection and fallbacks
+- Telegram in-app webview: detected and native share attempts are skipped; the image blob is opened directly (new tab) and a download is triggered.
+- Web Share API Level 2 with files (capable Android browsers): the share-with-file attempt runs first.
+- iOS and Safari variations: when file attachments are rejected, a text/url-only share is attempted as a fallback.
+- If native share is unavailable or blocked: the image is opened in a new tab (best-effort) and a download trigger runs; if that fails, the code attempts to copy image URL or descriptive text to the clipboard when available.
+- User cancellation of the native share sheet does not trigger fallback behavior.
+
+Known limitations and platform notes
+- Older iOS Safari may expose share APIs but reject files, so images might not attach natively; the text/url-only path is used instead.
+- Telegram in-app browser typically blocks native share; expect a download prompt or new-tab behavior rather than a share sheet.
+- Desktop browsers often lack native file-share support; expect download or clipboard fallbacks.
+- Popup blockers can prevent opening a new tab; the automatic download attempt still runs in most environments.
+
+Testing guide
+- Quick checklist (trigger the Share button from the toolbar after creating a meme):
+  - Android Chrome: expect native share sheet with the image attached.
+  - iOS Safari (recent versions): expect a share sheet; attached files may be rejected but text/url-only path should still succeed.
+  - Telegram in-app browser: expect a direct download prompt or a new tab with the image; native share is usually unavailable.
+  - Desktop Chrome/Firefox/Safari: expect download behavior; clipboard fallback when only text/url is available.
+
+Troubleshooting
+- If tapping Share does nothing on iOS, ensure it was a user gesture and that popup blockers allow opening tabs; the download fallback still runs in most cases.
+- If the native share sheet appears then closes immediately, this is likely a user cancel event and no fallback will run by design.
+- If the clipboard fallback fails, it may be due to permissions; interact with the page first and retry.
 ## Tech Stack
 
 *   **React 19**: For building the user interface.
@@ -348,6 +380,166 @@ The final meme is generated using `html2canvas` (or a similar library).
       });
     };
     ```
+ 
+ - The Share feature uses the same export target and UI-hiding as the existing download/export. The existing download behavior is unchanged.
+ 
+ ## Share (Web Share API)
+ - Adds a “Share” button in the toolbar to share the generated meme as a PNG via the native share sheet when supported (Web Share API Level 2, file sharing).
+ - If file sharing isn’t supported on the current platform, the action automatically falls back to the existing download/export.
+ - The PNG export uses the same canvas target and hides selection/handles as the normal download export.
+ 
+ Support notes:
+ - Android Chrome: Supported (Web Share API with files).
+ - Desktop browsers: Often do not support file sharing; will fall back to download.
+ - iOS Safari: File sharing support may be limited; will typically fall back to download.
+ - Secure context (HTTPS) is recommended for Web Share API.
+ 
+ ### Manual testing
+ - Desktop:
+   - Load a base image, click “Share” → expected: triggers download fallback.
+ - Android (Chrome):
+   - Load a base image, add text/stickers, click “Share” → expected: native share sheet with meme.png attached.
+ - iOS (Safari):
+   - Click “Share” → likely download fallback.
+ - Edge cases:
+   - “Share” is disabled until a base image is present.
+   - Canceling the native share sheet yields no error.
+
+## Unified Canvas 2D Render Pipeline
+
+To ensure perfect parity between the editor's preview and exported meme images, and to correctly scale visual effects (outline, glow, shadow) regardless of export resolution, the application now utilizes a unified, scale-aware Canvas 2D rendering pipeline. This approach eliminates discrepancies that arose from using CSS-based effects for the preview, which could not be reliably replicated during canvas export.
+
+*   **What it is and why**: A single, consistent set of drawing functions is used for both displaying layers in the editor and rendering them for export. This guarantees that "what you see is what you get," preventing visual differences in effects when exporting at various resolutions.
+*   **Where it lives**: The core rendering logic is encapsulated in [`utils/renderPipeline.ts`](utils/renderPipeline.ts). Key functions include:
+    *   [`drawMeme()`](utils/renderPipeline.ts): Orchestrates the drawing of the entire meme, including the base image and all layers.
+    *   [`drawTextLayer()`](utils/renderPipeline.ts): Renders individual text layers with all their configured effects (outline, glow, shadow).
+    *   [`drawStickerLayer()`](utils/renderPipeline.ts): Renders individual sticker layers, including their pseudo-outline effects.
+    *   [`getRenderContextForCanvas()`](utils/renderPipeline.ts): Provides a Canvas 2D rendering context, potentially with scaling applied.
+*   **How export reuses the same pipeline**: The export functionality, managed by [`utils/canvasExporter.ts`](utils/canvasExporter.ts), directly calls the functions from [`utils/renderPipeline.ts`](utils/renderPipeline.ts) to draw the meme onto an offscreen canvas. This ensures the exact same rendering logic is applied for the final output.
+*   **How preview uses the pipeline**:
+    *   [`components/TextCanvasPreview.tsx`](components/TextCanvasPreview.tsx): This component is responsible for rendering text layers using the unified pipeline for accurate preview of text effects.
+    *   [`components/CanvasEffectRenderer.tsx`](components/CanvasEffectRenderer.tsx): This component integrates the rendering pipeline to display effects for various layers within the editor, replacing previous CSS-based effect implementations.
+
+## Usage Instructions
+
+### Running the Project
+
+Follow the "Getting Started" instructions above to set up and run the development server.
+
+### Using the Editor
+
+1.  **Add Base Image**: Click "Upload Image" or "Templates" to start your meme.
+2.  **Add Text/Stickers**: Use the "Add Text" or "Add Sticker" buttons in the toolbar.
+3.  **Configure Effects**: Select a text or sticker layer on the canvas. Use the controls in the toolbar to adjust properties like font, color, size, outline, glow, and shadow.
+4.  **Manipulate Layers**: Drag to move, use the handles to resize, and the dedicated rotation handle to rotate layers.
+
+### Flattened Preview
+
+A "Flattened Preview" button is available in the toolbar ([`components/Toolbar.tsx`](components/Toolbar.tsx)). Clicking this button renders the entire meme onto a temporary canvas using the exact same unified render pipeline that the export function uses. This allows for immediate visual validation of export parity directly within the editor, ensuring that all effects and scaling appear as they will in the final exported image.
+
+### Exporting with Options
+
+To export your meme, click the "Export" button. The export process uses the unified pipeline and can be configured with various options:
+
+*   `targetScale`: Multiplier for the output resolution. For example, `window.devicePixelRatio` can be used to export at the device's native pixel density.
+*   `format`: Output image format (e.g., `'image/jpeg'`, `'image/png'`).
+*   `quality`: For JPEG format, a number between 0 and 1 indicating image quality.
+
+Example of calling the export function (conceptually):
+```typescript
+import { exportToDataURL } from './utils/canvasExporter';
+
+// ... inside an async function or event handler
+const dataUrl = await exportToDataURL(
+  memeCanvasRef.current, // The HTMLCanvasElement to render from
+  layers, // All meme layers
+  baseImage, // The base image
+  {
+    targetScale: window.devicePixelRatio * 2, // Export at 2x device resolution
+    format: 'image/png',
+    quality: 0.95, // High quality for JPEG/WebP, ignored for PNG
+  }
+);
+
+const link = document.createElement('a');
+link.download = `my-awesome-meme.png`;
+link.href = dataUrl;
+link.click();
+```
+
+## Effects Behavior and Scaling
+
+All visual effects are now rendered directly onto the Canvas 2D context, ensuring consistent behavior and proper scaling.
+
+*   **Outline (Text)**: Implemented using `ctx.strokeText()` with `ctx.lineJoin = 'round'`. The `lineWidth` property is dynamically scaled by `outlineWidth * 2 * scale` to maintain proportional thickness at different export resolutions.
+*   **Glow and Shadow (Text)**: Achieved using `ctx.shadowBlur`, `ctx.shadowOffsetX`, and `ctx.shadowOffsetY` properties. These properties are also scaled by the `targetScale` to ensure effects like blur radius and offset distances are consistent across resolutions. A multiple-pass approach is used for glow effects to enhance their appearance.
+*   **Sticker Outlines**: A "pseudo-outline" effect is applied by drawing the sticker multiple times with slight offsets in 8 directions before drawing the main sticker. These offsets are multiplied by the `export scale` to ensure the outline thickness scales correctly.
+    *   **Rendering pipeline: Sticker outline**: The [`applyOutlineEffect()`](utils/effectRenderer.ts:192) routine now uses a tinted silhouette mask created by [`createTintedSilhouette()`](utils/effectRenderer.ts:356) for outline passes. This prevents duplication of the full-color sticker image and ensures a clean outline. The canvas context state is reset between passes to avoid unintended drawing artifacts.
+*   **Notes on `devicePixelRatio`**: The `window.devicePixelRatio` significantly impacts how resolution affects effect thickness. When exporting at higher scales (e.g., `targetScale: 2`), effects like outlines and blur will naturally appear thicker in terms of raw pixels, but proportionally correct relative to the content. Always consider the `targetScale` when evaluating effect appearance.
+
+## Manual Testing Checklist (Regression Path)
+
+### Testing steps: Sticker Outline Fix
+1.  **Enable Outline**: Select a sticker layer and enable the "Outline" option in the toolbar.
+2.  **Adjust Outline**: Experiment with various outline widths and colors.
+3.  **Verify**: Confirm that the sticker displays a clean, solid outline without any duplicate images in the background.
+4.  **Test PNG/SVG**: Repeat steps 1-3 with both PNG and SVG sticker types.
+5.  **Export**: Export the meme and verify the outline appears correctly in the exported image.
+
+
+Before any release, perform the following checks to ensure the render pipeline and effects parity are maintained:
+
+1.  **Create a Complex Meme**:
+    *   Add a text layer with a thick outline, a strong glow, and an offset shadow.
+    *   Add a sticker layer with similar effects (e.g., a noticeable pseudo-outline).
+    *   Ensure layers are overlapping and positioned at various locations.
+2.  **Compare Previews and Exports**:
+    *   **Live Preview**: Observe the meme in the main editor canvas.
+    *   **Flattened Preview**: Click the "Flattened Preview" button in the toolbar and compare it against the live preview. They should be visually identical.
+    *   **Exported Images**: Export the meme at different `targetScale` values (e.g., 1x, 2x, 3x resolution). Open these exported images and compare them to the live and flattened previews.
+3.  **Layer Manipulation Consistency**:
+    *   Rotate several layers (text and stickers) with effects applied.
+    *   Resize layers with effects.
+    *   Confirm that effects (outline thickness, glow intensity, shadow offset/blur) remain consistent and proportionally scaled relative to the layer content across all manipulations and export scales.
+4.  **Acceptance Criteria**:
+    *   **Parity**: The live preview, flattened preview, and exported images must show identical visual effects at equivalent scales.
+    *   **Proportional Scaling**: Outline thickness, blur radius, and shadow offsets must scale proportionally with the `targetScale` of the export.
+
+## Troubleshooting
+
+*   **Outlines look thin at high scales**:
+    *   Confirm that the `scale` parameter passed to [`drawMeme()`](utils/renderPipeline.ts) and related drawing functions is correct.
+    *   Verify that `lineWidth` for text outlines is calculated as `outlineWidth * 2 * scale` within [`drawTextLayer()`](utils/renderPipeline.ts).
+*   **Sticker outlines appear soft or blurry at large widths**:
+    *   The current silhouette-based outline uses a fixed number of offset passes. For very large outline widths, this can lead to a slightly softer appearance. Consider implementing morphological dilation (e.g., using `ctx.filter = 'dilate(Xpx)'` or multiple passes with increasing offsets) for a sharper look at extreme widths.
+*   **Sticker outline rendering performance**:
+    *   Generating the tinted silhouette mask for each outline pass can be computationally intensive, especially for complex stickers or many layers. For performance-critical scenarios, consider caching the generated silhouette masks.
+*   **Glow/Shadow look weak or incorrect**:
+    *   Ensure `ctx.shadowBlur`, `ctx.shadowOffsetX`, and `ctx.shadowOffsetY` are correctly scaled by the `targetScale` in [`effectRenderer.ts`](utils/effectRenderer.ts) or [`drawTextLayer()`](utils/renderPipeline.ts).
+    *   Confirm that `ctx.shadow*` properties are reset (e.g., `ctx.shadowBlur = 0;`) between drawing passes to prevent unintended accumulation of effects.
+*   **Sticker effects differ from text effects**:
+    *   Verify that pseudo-outline offsets for stickers are correctly multiplied by the `scale` parameter.
+    *   Ensure the same `scale` value is consistently used for both preview and export rendering of stickers.
+*   **TypeScript reports transient React/JSX errors after edits**:
+    *   This can sometimes occur due to caching issues. Try restarting the TypeScript server (VS Code: `Ctrl+Shift+P` -> "TypeScript: Restart TS Server") or restarting the development server (`npm run dev`).
+
+## Developer Notes
+
+*   **Avoid CSS-based Effects**: Do not reintroduce CSS properties like `text-stroke`, `text-shadow`, or `drop-shadow` filters for preview rendering. These effects are difficult to replicate accurately on a Canvas 2D context and will lead to export parity issues. All effects must be rendered via the Canvas 2D pipeline.
+*   **Use Shared Render Pipeline Functions**: Always utilize the shared drawing functions provided in [`utils/renderPipeline.ts`](utils/renderPipeline.ts) (e.g., [`drawTextLayer()`](utils/renderPipeline.ts), [`drawStickerLayer()`](utils/renderPipeline.ts)) for rendering layers. Avoid duplicating drawing logic elsewhere in the codebase.
+*   **Maintain Z-Index and Context State**: Ensure `zIndex` ordering is consistent across all layers. When applying transforms or specific drawing styles, always use `ctx.save()` before and `ctx.restore()` after to prevent styles from leaking to other drawing operations.
+*   **Optional Background Parity**: For complete visual parity, consider rendering the base image background through the unified pipeline as well, rather than relying solely on `html2canvas` or direct image drawing. The "Flattened Preview" button serves as a strong verification tool for overall parity.
+
+## Changelog
+
+### Version X.Y.Z (Date)
+
+*   **Fix**: Resolved a bug where enabling the "Outline" option on stickers caused duplicates in the background. The fix involved switching to a tinted silhouette mask for outline passes and resetting the canvas state between passes.
+*   **Refactor**: Implemented a unified, scale-aware Canvas 2D rendering pipeline to ensure perfect visual parity between editor preview and exported images.
+*   **Feature**: Removed all CSS-based effects from the editor preview, replacing them with Canvas 2D rendering.
+*   **Feature**: Effects (outline, glow, shadow, sticker pseudo-outline) now scale proportionally with export resolution.
+*   **Feature**: Added "Flattened Preview" button for immediate visual validation of export parity.
+*   **Improvement**: Enhanced effect consistency across layer manipulations (resize, rotate).
 
 ## Rotation Handle Implementation Deep Dive
 
@@ -403,6 +595,15 @@ The rotation mechanism allows users to intuitively rotate layers.
       // ... other styles
     };
     ```
+
+## Environment and build status
+- Build/typecheck verification deferred:
+ - The project expects Node 22.x; current environment used Node 20, causing EBADENGINE/EBADPLATFORM issues.
+- To verify locally later:
+ 1) Use Node 22.x.
+ 2) Install deps: npm ci
+ 3) Typecheck: npx tsc --noEmit
+ 4) Build: npm run build
 
 ## File Structure Overview
 
