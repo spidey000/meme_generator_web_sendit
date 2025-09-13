@@ -5,10 +5,12 @@
  */
 
 // Import Telegram bot utilities
-import { 
-  shareMemeWithBot, 
-  shouldUseBotSharing, 
-  initializeTelegramWebApp 
+import {
+  shareMemeWithBot,
+  shouldUseBotSharing,
+  initializeTelegramWebApp,
+  logClientOperation,
+  logClientPerformance
 } from './telegramBot';
 
 export type ShareImageOptions = {
@@ -146,6 +148,15 @@ async function systemWideShareWithDataURL(blob: Blob, options: ShareImageOptions
   const url = options?.url;
   const onFallback = options?.onFallback;
   const env = getTelegramEnvironment();
+  const startTime = Date.now();
+
+  await logShareOperation('system_wide_share_start', env, {
+    filename,
+    hasTitle: !!title,
+    hasText: !!text,
+    hasUrl: !!url,
+    platform: env.platform
+  });
 
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -166,9 +177,11 @@ async function systemWideShareWithDataURL(blob: Blob, options: ShareImageOptions
                 const shareUrl = encodeURIComponent(url || '');
                 const intentUrl = `intent://share/#Intent;action=android.intent.action.SEND;type=image/png;S.android.intent.extra.TEXT=${shareText};S.android.intent.extra.SUBJECT=${encodeURIComponent(title || '')};end`;
                 window.location.href = intentUrl;
+                logShareOperation('android_intent_used', env, { strategy: 'android_intent' });
                 return true;
               } catch (e) {
                 console.warn('Android intent failed:', e);
+                logShareOperation('android_intent_failed', env, { error: (e as Error).message });
               }
             }
             
@@ -210,6 +223,7 @@ async function systemWideShareWithDataURL(blob: Blob, options: ShareImageOptions
                   </body>
                 </html>
               `);
+              logShareOperation('telegram_preview_window', env, { strategy: 'preview_window' });
               return true;
             }
           }
@@ -296,21 +310,40 @@ async function systemWideShareWithDataURL(blob: Blob, options: ShareImageOptions
         const strategy = strategies[i];
         try {
           console.log(`Attempting share strategy ${i + 1}/${strategies.length}`);
+          logShareOperation('strategy_attempt', env, {
+            strategyIndex: i + 1,
+            totalStrategies: strategies.length
+          });
+          
           if (strategy()) {
             console.log(`Share strategy ${i + 1} succeeded`);
+            await logShareOperation('strategy_success', env, {
+              strategyIndex: i + 1,
+              duration: Date.now() - startTime
+            });
             setTimeout(resolve, 500); // Give it time to work
             return;
           }
         } catch (e) {
           console.warn(`Share strategy ${i + 1} failed:`, e);
+          await logShareOperation('strategy_failed', env, {
+            strategyIndex: i + 1,
+            error: (e as Error).message
+          });
           // Continue to next strategy
         }
       }
       
+      await logShareOperation('all_strategies_failed', env, {
+        duration: Date.now() - startTime
+      });
       reject(new Error('All share strategies failed'));
     };
     
-    reader.onerror = () => reject(new Error('Failed to read blob'));
+    reader.onerror = () => {
+      logShareOperation('blob_read_failed', env, { error: 'Failed to read blob' });
+      reject(new Error('Failed to read blob'));
+    };
     reader.readAsDataURL(blob);
   });
 }
@@ -353,7 +386,7 @@ export async function shareImageBlob(
   const env = getTelegramEnvironment();
   
   // Log the initial share attempt
-  logShareOperation('shareImageBlob started', env, {
+  await logShareOperation('shareImageBlob started', env, {
     hasNavigatorShare,
     isBrave: env.isBrave,
     blobSize: blob.size,
@@ -382,10 +415,15 @@ export async function shareImageBlob(
           console.error('Bot sharing error:', error);
         }
       });
-      logShareOperation('Telegram bot share completed', env);
+      await logShareOperation('Telegram bot share completed', env, {
+        duration: Date.now() - startTime
+      });
       return;
     } catch (error) {
-      logShareOperation('Telegram bot share failed, falling back to enhanced strategies', env, { error: error.message });
+      await logShareOperation('Telegram bot share failed, falling back to enhanced strategies', env, {
+        error: (error as Error).message,
+        duration: Date.now() - startTime
+      });
       console.warn('Telegram bot share failed, falling back:', error);
       // Fall through to enhanced strategies
     }
@@ -397,10 +435,15 @@ export async function shareImageBlob(
     try {
       await systemWideShareWithDataURL(blob, { filename, title, text, url, onFallback });
       onFallback?.("telegram-enhanced");
-      logShareOperation('Telegram-enhanced share completed', env);
+      await logShareOperation('Telegram-enhanced share completed', env, {
+        duration: Date.now() - startTime
+      });
       return;
     } catch (error) {
-      logShareOperation('Telegram-enhanced share failed, falling back', env, { error: error.message });
+      await logShareOperation('Telegram-enhanced share failed, falling back', env, {
+        error: (error as Error).message,
+        duration: Date.now() - startTime
+      });
       console.warn('Telegram-enhanced share failed, falling back:', error);
       // Fall through to standard methods
     }
@@ -409,10 +452,15 @@ export async function shareImageBlob(
     try {
       await systemWideShareWithDataURL(blob, { filename, title, text, url, onFallback });
       onFallback?.("system-wide");
-      logShareOperation('System-wide share completed', env);
+      await logShareOperation('System-wide share completed', env, {
+        duration: Date.now() - startTime
+      });
       return;
     } catch (error) {
-      logShareOperation('System-wide share failed, falling back', env, { error: error.message });
+      await logShareOperation('System-wide share failed, falling back', env, {
+        error: (error as Error).message,
+        duration: Date.now() - startTime
+      });
       console.warn('System-wide share failed, falling back:', error);
       // Fall through to standard methods
     }
@@ -420,19 +468,21 @@ export async function shareImageBlob(
 
   // Try Web Share API -优先处理标准浏览器
   if (hasNavigatorShare) {
-    logShareOperation('Web Share API available, attempting share', env, { isBrave });
+    await logShareOperation('Web Share API available, attempting share', env, { isBrave: env.isBrave });
     
     try {
       // 对于Brave浏览器，直接尝试text/url分享，因为文件分享可能不稳定
       if (env.isBrave) {
-        logShareOperation('Brave detected, using text/url sharing', env);
+        await logShareOperation('Brave detected, using text/url sharing', env);
         try {
           await (navigator as Navigator).share({ title, text, url });
-          logShareOperation('Brave share completed successfully', env);
+          await logShareOperation('Brave share completed successfully', env, {
+            duration: Date.now() - startTime
+          });
           return;
         } catch (err: unknown) {
           if (isAbortError(err)) return; // User cancelled
-          logShareOperation('Brave share failed, trying fallbacks', env, { error: err });
+          await logShareOperation('Brave share failed, trying fallbacks', env, { error: err });
         }
       } else {
         // 标准浏览器的完整流程
@@ -442,26 +492,30 @@ export async function shareImageBlob(
         if (canShareFiles([file])) {
           try {
             await (navigator as Navigator).share({ files: [file], title, text, url });
-            logShareOperation('File share completed successfully', env);
+            await logShareOperation('File share completed successfully', env, {
+              duration: Date.now() - startTime
+            });
             return;
           } catch (err: unknown) {
             if (isAbortError(err)) return; // User cancelled
-            logShareOperation('File share failed, trying text/url', env, { error: err });
+            await logShareOperation('File share failed, trying text/url', env, { error: err });
           }
         }
 
         // 回退到text/url分享 (更兼容)
         try {
           await (navigator as Navigator).share({ title, text, url });
-          logShareOperation('Text/url share completed successfully', env);
+          await logShareOperation('Text/url share completed successfully', env, {
+            duration: Date.now() - startTime
+          });
           return;
         } catch (err: unknown) {
           if (isAbortError(err)) return; // User cancelled
-          logShareOperation('Text/url share failed, trying fallbacks', env, { error: err });
+          await logShareOperation('Text/url share failed, trying fallbacks', env, { error: err });
         }
       }
     } catch (err) {
-      logShareOperation('Web Share API completely failed, using fallbacks', env, { error: err });
+      await logShareOperation('Web Share API completely failed, using fallbacks', env, { error: err });
       // 继续到后备方案
     }
   }
@@ -472,7 +526,7 @@ export async function shareImageBlob(
   try {
     // 对于Brave浏览器，跳过系统级分享，直接下载
     if (env.isBrave) {
-      logShareOperation('Brave detected, skipping system-wide share, using download', env);
+      await logShareOperation('Brave detected, skipping system-wide share, using download', env);
       await fallbackDownloadAndMaybeOpen(blob, filename, onFallback);
       onFallback?.("brave-download");
     } else {
@@ -480,17 +534,37 @@ export async function shareImageBlob(
       await systemWideShareWithDataURL(blob, { filename, title, text, url, onFallback });
       onFallback?.("system-wide-fallback");
     }
-    logShareOperation('Final fallback completed successfully', env);
+    await logShareOperation('Final fallback completed successfully', env, {
+      duration: Date.now() - startTime
+    });
+    
+    // Log performance metrics for completed share operation
+    await logClientPerformance('share_image_blob', Date.now() - startTime, {
+      filename,
+      blobSize: blob.size,
+      platform: env.platform,
+      isBrave: env.isBrave,
+      fallbackUsed: true
+    });
+    
   } catch (error) {
-    logShareOperation('Final fallback failed, using ultimate fallback', env, { error: error?.message });
+    await logShareOperation('Final fallback failed, using ultimate fallback', env, {
+      error: (error as Error)?.message,
+      duration: Date.now() - startTime
+    });
     
     // 终极后备方案：直接下载
     try {
       await fallbackDownloadAndMaybeOpen(blob, filename, onFallback);
       onFallback?.("download");
-      logShareOperation('Ultimate download fallback completed', env);
+      await logShareOperation('Ultimate download fallback completed', env, {
+        duration: Date.now() - startTime
+      });
     } catch (downloadError) {
-      logShareOperation('Download failed, using clipboard fallback', env, { error: downloadError?.message });
+      await logShareOperation('Download failed, using clipboard fallback', env, {
+        error: (downloadError as Error)?.message,
+        duration: Date.now() - startTime
+      });
       
       // 最后的手段：复制到剪贴板
       if (text || url) {
@@ -533,22 +607,37 @@ export async function shareData(options: ShareDataLite): Promise<void> {
 }
 
 /**
- * Enhanced debugging utility for share operations
+ * Enhanced debugging utility for share operations with Vercel logging
  */
-function logShareOperation(operation: string, env: any, details?: any) {
+async function logShareOperation(operation: string, env: any, details?: any) {
   const isDebugMode = typeof window !== 'undefined' && (window as any).DEBUG_TELEGRAM_SHARE;
+  const logData = {
+    platform: env.platform,
+    isTelegram: env.isTelegram,
+    userAgent: typeof navigator !== 'undefined' ? navigator.userAgent.substring(0, 100) : 'unknown',
+    timestamp: new Date().toISOString(),
+    ...details,
+    category: 'share_operation'
+  };
   
+  // Always log to console for development
   if (isDebugMode) {
-    console.log(`[Share Debug] ${operation}:`, {
-      platform: env.platform,
-      isTelegram: env.isTelegram,
-      userAgent: navigator.userAgent.substring(0, 100),
-      timestamp: new Date().toISOString(),
-      ...details
-    });
+    console.log(`[Share Debug] ${operation}:`, logData);
   }
   
-  // Always log critical errors
+  // Send to Vercel logging system
+  try {
+    const level = details?.error ? 'ERROR' :
+                  operation.includes('failed') ? 'WARN' :
+                  operation.includes('completed') ? 'INFO' : 'DEBUG';
+    
+    await logClientOperation(operation, `Share operation: ${operation}`, level, logData);
+  } catch (error) {
+    // Fallback to console if client logging fails
+    console.warn('Failed to send share log to backend:', error);
+  }
+  
+  // Always log critical errors to console
   if (details?.error) {
     console.error(`[Share Error] ${operation}:`, details.error);
   }

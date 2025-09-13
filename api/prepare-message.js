@@ -1,50 +1,62 @@
 const TelegramBot = require('node-telegram-bot-api');
+const logger = require('../utils/vercelLogger');
 
 // Initialize the bot with environment variable
 const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN);
 
 module.exports = async (req, res) => {
+  const prepareStartTime = Date.now();
+  
   // Set CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
   if (req.method === 'OPTIONS') {
+    logger.info('Message preparation OPTIONS request', { method: 'OPTIONS', url: req.url });
     return res.status(200).end();
   }
 
   if (req.method !== 'POST') {
+    logger.warn('Invalid method for message preparation', { method: req.method, url: req.url });
     return res.status(405).json({ error: 'Method not allowed' });
   }
+
+  // Start request tracing
+  const requestId = logger.startRequest(req, { operation: 'message_preparation' });
+  logger.logApiOperation('/api/prepare-message', 'POST', { requestId });
 
   try {
     const { imageUrl, userId, caption = 'Check out this meme!' } = req.body;
 
     if (!imageUrl) {
+      logger.warn('Image URL missing in message preparation', { requestId, body: req.body });
       return res.status(400).json({ error: 'Image URL is required' });
     }
 
     if (!userId) {
+      logger.warn('User ID missing in message preparation', { requestId, body: req.body });
       return res.status(400).json({ error: 'User ID is required' });
     }
 
     // Get the base URL for the current deployment
-    const baseUrl = process.env.VERCEL_URL 
+    const baseUrl = process.env.VERCEL_URL
       ? `https://${process.env.VERCEL_URL}`
-      : req.headers.host 
+      : req.headers.host
         ? `${req.protocol}://${req.headers.host}`
         : 'http://localhost:5173';
 
     // Make the image URL absolute
-    const absoluteImageUrl = imageUrl.startsWith('http') 
-      ? imageUrl 
+    const absoluteImageUrl = imageUrl.startsWith('http')
+      ? imageUrl
       : `${baseUrl}${imageUrl}`;
 
-    console.log('Preparing message:', {
+    logger.info('Preparing message', {
       imageUrl: absoluteImageUrl,
       userId,
       caption: caption.substring(0, 50) + '...',
-      baseUrl
+      baseUrl,
+      requestId
     });
 
     // Create a unique message ID
@@ -67,6 +79,7 @@ module.exports = async (req, res) => {
 
     // If the bot supports savePreparedInlineMessage, try to use it
     try {
+      logger.debug('Attempting to save prepared inline message via Telegram API');
       const savedMessage = await bot.savePreparedInlineMessage({
         result: {
           type: 'photo',
@@ -79,26 +92,55 @@ module.exports = async (req, res) => {
         peer_types: ['same_chat', 'pm', 'group', 'channel']
       });
 
-      console.log('Message prepared successfully:', savedMessage);
-      res.json({ msgId: savedMessage.id, imageUrl: absoluteImageUrl });
+      logger.logBotOperation('message_prepared', {
+        success: true,
+        messageId: savedMessage.id,
+        userId,
+        method: 'telegram_api',
+        duration: Date.now() - prepareStartTime,
+        requestId
+      });
+
+      const response = { msgId: savedMessage.id, imageUrl: absoluteImageUrl, requestId };
+      res.json(response);
+      logger.endRequest(requestId, { statusCode: 200, size: JSON.stringify(response).length });
 
     } catch (botError) {
-      console.warn('savePreparedInlineMessage failed, using fallback:', botError.message);
+      logger.warn('savePreparedInlineMessage failed, using fallback', {
+        error: botError.message,
+        userId,
+        messageId,
+        requestId
+      });
       
       // Fallback: return our own prepared message ID
-      console.log('Using fallback message preparation');
-      res.json({ 
-        msgId: messageId, 
+      logger.debug('Using fallback message preparation', { userId, messageId });
+      
+      const response = {
+        msgId: messageId,
         imageUrl: absoluteImageUrl,
-        fallback: true
-      });
+        fallback: true,
+        requestId
+      };
+      
+      res.json(response);
+      logger.endRequest(requestId, { statusCode: 200, size: JSON.stringify(response).length });
     }
 
   } catch (error) {
-    console.error('Message preparation error:', error);
-    res.status(500).json({ 
-      error: 'Failed to prepare message',
-      details: error.message 
+    logger.error('Message preparation error', {
+      error,
+      requestId,
+      body: { imageUrl: req.body?.imageUrl, userId: req.body?.userId },
+      stack: error.stack
     });
+    
+    res.status(500).json({
+      error: 'Failed to prepare message',
+      details: error.message,
+      requestId
+    });
+    
+    logger.endRequest(requestId, { statusCode: 500, error: error.message });
   }
 };
