@@ -15,6 +15,25 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(morgan('dev'));
 
+// Authentication middleware for API endpoints
+app.use('/api/', async (req, res, next) => {
+  if (process.env.NODE_ENV === 'development') {
+    return next(); // Skip auth in development
+  }
+  
+  const authHeader = req.headers.authorization;
+  if (!authHeader) {
+    return res.status(401).json({ error: 'Missing authentication' });
+  }
+  
+  // Simple validation for now - enhance later
+  if (!authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'Invalid authentication format' });
+  }
+  
+  next();
+});
+
 // Import API endpoints
 const healthRouter = require('./api/health');
 const botTestRouter = require('./api/bot-test');

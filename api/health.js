@@ -5,6 +5,7 @@
 
 const TelegramBot = require('node-telegram-bot-api');
 const https = require('https');
+const http = require('http');
 const logger = require('../utils/vercelLogger');
 
 module.exports = async (req, res) => {
@@ -234,7 +235,11 @@ function testEndpointAvailability(baseUrl, endpointPath, method = 'GET') {
     const startTime = Date.now();
     const url = `${baseUrl}/api/${endpointPath}`;
     
-    const req = https.request(url, {
+    // Use HTTP for local testing, HTTPS for production
+    const isLocal = baseUrl.includes('localhost') || baseUrl.includes('127.0.0.1');
+    const httpModule = isLocal ? http : https;
+    
+    const req = httpModule.request(url, {
       method: 'OPTIONS',
       timeout: 3000,
       headers: {

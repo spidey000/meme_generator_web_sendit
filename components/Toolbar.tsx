@@ -88,6 +88,8 @@ const Toolbar: React.FC<ToolbarProps> = ({
     if (!hasBaseImage) return;
     
     const env = getTelegramEnvironment();
+    const button = event.currentTarget;
+    const originalText = button?.textContent || 'Share';
     
     console.log(`Share clicked - Telegram: ${env.isTelegram}, Brave: ${env.isBrave}, Platform: ${env.platform}`);
     
@@ -95,9 +97,10 @@ const Toolbar: React.FC<ToolbarProps> = ({
       const blob = await getImageBlob();
       
       // Show loading feedback
-      const originalText = event.currentTarget.textContent;
-      event.currentTarget.textContent = 'Sharing...';
-      event.currentTarget.disabled = true;
+      if (button) {
+        button.textContent = 'Sharing...';
+        button.disabled = true;
+      }
       
       await shareImageBlob(blob, {
         filename: 'meme.png',
@@ -136,8 +139,10 @@ const Toolbar: React.FC<ToolbarProps> = ({
       }
     } finally {
       // Restore button state
-      event.currentTarget.textContent = originalText;
-      event.currentTarget.disabled = false;
+      if (button) {
+        button.textContent = originalText;
+        button.disabled = false;
+      }
     }
   };
 

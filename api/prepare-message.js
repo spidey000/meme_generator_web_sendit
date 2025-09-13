@@ -77,55 +77,18 @@ module.exports = async (req, res) => {
       peer_types: ['same_chat', 'pm', 'group', 'channel']
     };
 
-    // If the bot supports savePreparedInlineMessage, try to use it
-    try {
-      logger.debug('Attempting to save prepared inline message via Telegram API');
-      const savedMessage = await bot.savePreparedInlineMessage({
-        result: {
-          type: 'photo',
-          id: messageId,
-          photo_url: absoluteImageUrl,
-          thumbnail_url: absoluteImageUrl,
-          caption: caption
-        },
-        user_id: userId,
-        peer_types: ['same_chat', 'pm', 'group', 'channel']
-      });
-
-      logger.logBotOperation('message_prepared', {
-        success: true,
-        messageId: savedMessage.id,
-        userId,
-        method: 'telegram_api',
-        duration: Date.now() - prepareStartTime,
-        requestId
-      });
-
-      const response = { msgId: savedMessage.id, imageUrl: absoluteImageUrl, requestId };
-      res.json(response);
-      logger.endRequest(requestId, { statusCode: 200, size: JSON.stringify(response).length });
-
-    } catch (botError) {
-      logger.warn('savePreparedInlineMessage failed, using fallback', {
-        error: botError.message,
-        userId,
-        messageId,
-        requestId
-      });
-      
-      // Fallback: return our own prepared message ID
-      logger.debug('Using fallback message preparation', { userId, messageId });
-      
-      const response = {
-        msgId: messageId,
-        imageUrl: absoluteImageUrl,
-        fallback: true,
-        requestId
-      };
-      
-      res.json(response);
-      logger.endRequest(requestId, { statusCode: 200, size: JSON.stringify(response).length });
-    }
+    // Use local ID generation since savePreparedInlineMessage is not available
+    logger.debug('Using fallback message preparation', { userId, messageId });
+    
+    const response = {
+      msgId: messageId,
+      imageUrl: absoluteImageUrl,
+      fallback: true,
+      requestId
+    };
+    
+    res.json(response);
+    logger.endRequest(requestId, { statusCode: 200, size: JSON.stringify(response).length });
 
   } catch (error) {
     logger.error('Message preparation error', {

@@ -384,6 +384,7 @@ export async function shareImageBlob(
 
   const hasNavigatorShare = typeof navigator !== "undefined" && !!(navigator as Navigator).share;
   const env = getTelegramEnvironment();
+  const startTime = Date.now();
   
   // Log the initial share attempt
   await logShareOperation('shareImageBlob started', env, {
