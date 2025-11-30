@@ -42,24 +42,24 @@ export function getTelegramEnvironment(): {
   userAgent: string;
 } {
   if (typeof navigator === "undefined") {
-    return { 
-      isTelegram: false, 
-      isAndroid: false, 
-      isIOS: false, 
-      isDesktop: false, 
+    return {
+      isTelegram: false,
+      isAndroid: false,
+      isIOS: false,
+      isDesktop: false,
       platform: "unknown",
       isBrave: false,
       userAgent: "unknown"
     };
   }
-  
+
   const ua = navigator.userAgent.toLowerCase();
   const isTelegram = ua.includes('telegram') || ua.includes('tgweb');
   const isAndroid = ua.includes('android');
   const isIOS = /iphone|ipad|ipod/.test(ua);
   const isDesktop = !isAndroid && !isIOS;
   const isBrave = ua.includes('brave');
-  
+
   return {
     isTelegram,
     isAndroid,
@@ -77,13 +77,13 @@ export function getTelegramEnvironment(): {
 function isRestrictiveEnvironment(): boolean {
   const env = getTelegramEnvironment();
   const ua = navigator.userAgent.toLowerCase();
-  
+
   // Only detect truly restrictive environments
-  return env.isTelegram || 
-         ua.includes('webview') ||
-         ua.includes('instagram') ||
-         ua.includes('facebook') ||
-         ua.includes('twitter');
+  return env.isTelegram ||
+    ua.includes('webview') ||
+    ua.includes('instagram') ||
+    ua.includes('facebook') ||
+    ua.includes('twitter');
 }
 
 /**
@@ -162,86 +162,14 @@ async function systemWideShareWithDataURL(blob: Blob, options: ShareImageOptions
     const reader = new FileReader();
     reader.onload = async () => {
       const dataURL = reader.result as string;
-      
+
       // Try different system-wide approaches based on platform
       const strategies = [
         // 1. Telegram-specific strategies
         () => {
           if (env.isTelegram) {
-            console.log('Telegram detected, using Telegram-specific strategies');
-            
-            // Android Telegram: Enhanced intent handling
-            if (env.isAndroid) {
-              try {
-                const shareText = encodeURIComponent(text || title || '');
-                const shareUrl = encodeURIComponent(url || '');
-                const intentUrl = `intent://share/#Intent;action=android.intent.action.SEND;type=image/png;S.android.intent.extra.TEXT=${shareText};S.android.intent.extra.SUBJECT=${encodeURIComponent(title || '')};end`;
-                window.location.href = intentUrl;
-                logShareOperation('android_intent_used', env, { strategy: 'android_intent' });
-                return true;
-              } catch (e) {
-                console.warn('Android intent failed:', e);
-                logShareOperation('android_intent_failed', env, { error: (e as Error).message });
-              }
-            }
-            
-            // iOS/Desktop Telegram: Direct image preview
-            const newWindow = window.open('', '_blank');
-            if (newWindow) {
-              newWindow.document.write(`
-                <html>
-                  <head><title>${title || 'Share Image'}</title>
-                  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                  <style>
-                    body { margin:0; padding:20px; text-align:center; font-family:-apple-system,BlinkMacSystemFont,sans-serif; background:#f5f5f5; }
-                    .container { max-width:600px; margin:0 auto; background:white; padding:30px; border-radius:12px; box-shadow:0 4px6px rgba(0,0,0,0.1); }
-                    h2 { color:#333; margin-bottom:10px; }
-                    .instructions { color:#666; margin-bottom:20px; font-size:16px; }
-                    .image-container { margin:20px 0; }
-                    img { max-width:100%; max-height:60vh; border:2px solid #e0e0e0; border-radius:8px; }
-                    .telegram-hint { background:#0088cc; color:white; padding:15px; border-radius:8px; margin-top:20px; font-size:14px; }
-                    .save-hint { background:#4CAF50; color:white; padding:15px; border-radius:8px; margin-top:10px; font-size:14px; }
-                  </style>
-                  </head>
-                  <body>
-                    <div class="container">
-                      <h2>${title || 'Share this image'}</h2>
-                      <p class="instructions">${text || 'Long press the image to save and share'}</p>
-                      <div class="image-container">
-                        <img src="${dataURL}" alt="Generated meme" />
-                      </div>
-                      <div class="telegram-hint">
-                        <strong>📱 Telegram Users:</strong><br>
-                        Long press the image above and select "Save to Gallery" or "Share"
-                      </div>
-                      <div class="save-hint">
-                        <strong>💾 Alternative:</strong><br>
-                        Take a screenshot of the image and share it from your gallery
-                      </div>
-                      ${url ? `<p style="margin-top:20px;color:#999;font-size:12px;">Original: ${url}</p>` : ''}
-                    </div>
-                  </body>
-                </html>
-              `);
-              logShareOperation('telegram_preview_window', env, { strategy: 'preview_window' });
-              return true;
-            }
-          }
-          return false;
-        },
-        
-        // 2. Android intent:// scheme (for non-Telegram Android)
-        () => {
-          if (!env.isTelegram && /android/i.test(navigator.userAgent)) {
-            const shareText = encodeURIComponent(text || title || '');
-            const shareUrl = encodeURIComponent(url || '');
-            const intentUrl = `intent://share/#Intent;action=android.intent.action.SEND;type=image/png;S.android.intent.extra.TEXT=${shareText};S.android.intent.extra.SUBJECT=${encodeURIComponent(title || '')};end`;
-            window.location.href = intentUrl;
-            return true;
-          }
-          return false;
-        },
-        
+          },
+
         // 3. Universal share link
         () => {
           const shareData = {
@@ -250,13 +178,13 @@ async function systemWideShareWithDataURL(blob: Blob, options: ShareImageOptions
             url: url || '',
             image: dataURL
           };
-          
+
           // Create a shareable data URL that includes all share info
           const shareDataURL = `data:text/json;base64,${btoa(JSON.stringify(shareData))}`;
           window.open(shareDataURL, '_blank');
           return true;
         },
-        
+
         // 4. Direct image open with share instructions
         () => {
           // Open image in new tab with instructions
@@ -296,7 +224,7 @@ async function systemWideShareWithDataURL(blob: Blob, options: ShareImageOptions
           }
           return false;
         },
-        
+
         // 5. Fallback to download
         () => {
           forceDownload(dataURL, filename);
@@ -314,7 +242,7 @@ async function systemWideShareWithDataURL(blob: Blob, options: ShareImageOptions
             strategyIndex: i + 1,
             totalStrategies: strategies.length
           });
-          
+
           if (strategy()) {
             console.log(`Share strategy ${i + 1} succeeded`);
             await logShareOperation('strategy_success', env, {
@@ -333,13 +261,13 @@ async function systemWideShareWithDataURL(blob: Blob, options: ShareImageOptions
           // Continue to next strategy
         }
       }
-      
+
       await logShareOperation('all_strategies_failed', env, {
         duration: Date.now() - startTime
       });
       reject(new Error('All share strategies failed'));
     };
-    
+
     reader.onerror = () => {
       logShareOperation('blob_read_failed', env, { error: 'Failed to read blob' });
       reject(new Error('Failed to read blob'));
@@ -385,7 +313,7 @@ export async function shareImageBlob(
   const hasNavigatorShare = typeof navigator !== "undefined" && !!(navigator as Navigator).share;
   const env = getTelegramEnvironment();
   const startTime = Date.now();
-  
+
   // Log the initial share attempt
   await logShareOperation('shareImageBlob started', env, {
     hasNavigatorShare,
@@ -435,23 +363,6 @@ export async function shareImageBlob(
     logShareOperation('Telegram detected, using enhanced strategies', env);
     try {
       await systemWideShareWithDataURL(blob, { filename, title, text, url, onFallback });
-      onFallback?.("telegram-enhanced");
-      await logShareOperation('Telegram-enhanced share completed', env, {
-        duration: Date.now() - startTime
-      });
-      return;
-    } catch (error) {
-      await logShareOperation('Telegram-enhanced share failed, falling back', env, {
-        error: (error as Error).message,
-        duration: Date.now() - startTime
-      });
-      console.warn('Telegram-enhanced share failed, falling back:', error);
-      // Fall through to standard methods
-    }
-  } else if (isRestrictiveEnvironment()) {
-    logShareOperation('Other restrictive environment detected', env);
-    try {
-      await systemWideShareWithDataURL(blob, { filename, title, text, url, onFallback });
       onFallback?.("system-wide");
       await logShareOperation('System-wide share completed', env, {
         duration: Date.now() - startTime
@@ -470,7 +381,7 @@ export async function shareImageBlob(
   // Try Web Share API -优先处理标准浏览器
   if (hasNavigatorShare) {
     await logShareOperation('Web Share API available, attempting share', env, { isBrave: env.isBrave });
-    
+
     try {
       // 对于Brave浏览器，直接尝试text/url分享，因为文件分享可能不稳定
       if (env.isBrave) {
@@ -523,7 +434,7 @@ export async function shareImageBlob(
 
   // 最终后备方案：处理剩余情况
   logShareOperation('Using final fallback strategies', env, { isBrave: env.isBrave });
-  
+
   try {
     // 对于Brave浏览器，跳过系统级分享，直接下载
     if (env.isBrave) {
@@ -538,7 +449,7 @@ export async function shareImageBlob(
     await logShareOperation('Final fallback completed successfully', env, {
       duration: Date.now() - startTime
     });
-    
+
     // Log performance metrics for completed share operation
     await logClientPerformance('share_image_blob', Date.now() - startTime, {
       filename,
@@ -547,13 +458,13 @@ export async function shareImageBlob(
       isBrave: env.isBrave,
       fallbackUsed: true
     });
-    
+
   } catch (error) {
     await logShareOperation('Final fallback failed, using ultimate fallback', env, {
       error: (error as Error)?.message,
       duration: Date.now() - startTime
     });
-    
+
     // 终极后备方案：直接下载
     try {
       await fallbackDownloadAndMaybeOpen(blob, filename, onFallback);
@@ -566,7 +477,7 @@ export async function shareImageBlob(
         error: (downloadError as Error)?.message,
         duration: Date.now() - startTime
       });
-      
+
       // 最后的手段：复制到剪贴板
       if (text || url) {
         const composed = [text, url].filter(Boolean).join(" ");
@@ -620,55 +531,28 @@ async function logShareOperation(operation: string, env: any, details?: any) {
     ...details,
     category: 'share_operation'
   };
-  
+
   // Always log to console for development
   if (isDebugMode) {
     console.log(`[Share Debug] ${operation}:`, logData);
   }
-  
+
   // Send to Vercel logging system
   try {
     const level = details?.error ? 'ERROR' :
-                  operation.includes('failed') ? 'WARN' :
-                  operation.includes('completed') ? 'INFO' : 'DEBUG';
-    
+      operation.includes('failed') ? 'WARN' :
+        operation.includes('completed') ? 'INFO' : 'DEBUG';
+
     await logClientOperation(operation, `Share operation: ${operation}`, level, logData);
   } catch (error) {
     // Fallback to console if client logging fails
     console.warn('Failed to send share log to backend:', error);
   }
-  
+
   // Always log critical errors to console
   if (details?.error) {
     console.error(`[Share Error] ${operation}:`, details.error);
   }
-}
-
-/**
- * Test utility to validate share functionality
- */
-export function testShareFunctionality() {
-  const env = getTelegramEnvironment();
-  const results = {
-    environment: env,
-    features: {
-      hasNavigatorShare: typeof navigator !== "undefined" && !!(navigator as Navigator).share,
-      hasClipboard: typeof navigator !== "undefined" && !!(navigator as any).clipboard,
-      hasBlobSupport: typeof Blob !== "undefined",
-      hasFileReader: typeof FileReader !== "undefined",
-      hasURLSupport: typeof URL !== "undefined"
-    },
-    compatibility: {
-      telegramSupported: env.isTelegram,
-      braveSupported: env.isBrave,
-      androidSupported: env.isAndroid,
-      iosSupported: env.isIOS,
-      desktopSupported: env.isDesktop
-    }
-  };
-  
-  console.log('[Share Test Results]', results);
-  return results;
 }
 
 /**

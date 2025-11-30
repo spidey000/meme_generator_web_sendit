@@ -5,7 +5,7 @@ import { BRAND_COLORS, INITIAL_TEXT_LAYER, MAX_Z_INDEX, MIN_LAYER_DIMENSION, INI
 import MemeCanvas from './components/MemeCanvas';
 import Toolbar from './components/Toolbar';
 import MemeTemplateGallery from './components/MemeTemplateGallery';
-import ShareDebugger from './components/ShareDebugger';
+
 import html2canvas from 'html2canvas';
 import { CanvasExporter } from './utils/canvasExporter';
 
@@ -18,7 +18,7 @@ const App: React.FC = () => {
   const [showMemeTemplateGallery, setShowMemeTemplateGallery] = useState<boolean>(false);
   const [dynamicTemplates, setDynamicTemplates] = useState<MemeTemplateOption[]>([]);
   const [dynamicStickers, setDynamicStickers] = useState<StickerOption[]>([]);
-  
+
   const [activeInteraction, setActiveInteraction] = useState<ActiveInteraction | null>(null);
   const memeCanvasRef = useRef<HTMLDivElement>(null); // For canvas area bounds & click outside
   const mainCanvasAreaRef = useRef<HTMLDivElement>(null); // Ref for the main canvas area for interaction bounds
@@ -93,7 +93,7 @@ const App: React.FC = () => {
             initialHeight *= scale;
           }
         }
-        
+
         const relevantOverrides: Partial<StickerLayerProps> = {
           outlineColor: castedProps.outlineColor,
           outlineWidth: castedProps.outlineWidth,
@@ -147,7 +147,7 @@ const App: React.FC = () => {
       }).filter(Boolean) as Layer[] // Filter out potential nulls if robust error handling added
     );
   }, []);
-  
+
   const deleteLayer = useCallback((id: string) => {
     setLayers(prevLayers => prevLayers.filter(layer => layer.id !== id));
     if (selectedLayerId === id) {
@@ -172,10 +172,10 @@ const App: React.FC = () => {
   const handleExportMeme = async () => {
     try {
       setSelectedLayerId(null);
-      
+
       // Wait for UI to update
       await new Promise(resolve => setTimeout(resolve, 100));
-      
+
       if (!baseImage) {
         alert("Please add a base image before exporting.");
         return;
@@ -184,7 +184,7 @@ const App: React.FC = () => {
       // Load base image
       const baseImageElement = new Image();
       baseImageElement.crossOrigin = 'anonymous';
-      
+
       await new Promise((resolve, reject) => {
         baseImageElement.onload = resolve;
         baseImageElement.onerror = reject;
@@ -203,7 +203,7 @@ const App: React.FC = () => {
 
       // Use canvas exporter (unified pipeline)
       const exporter = new CanvasExporter();
-      
+
       try {
         const dataURL = await exporter.exportToDataURL(
           baseImageElement,
@@ -222,20 +222,20 @@ const App: React.FC = () => {
         link.download = `sendit-fun-${Date.now()}.jpg`;
         link.href = dataURL;
         link.style.display = 'none';
-        
+
         // Enhanced Telegram detection and handling
         const isTelegram = typeof navigator !== 'undefined' && /Telegram/i.test(navigator.userAgent);
         const isAndroid = typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent);
         const isIOS = typeof navigator !== 'undefined' && /iPhone|iPad|iPod/i.test(navigator.userAgent);
-        
+
         console.log(`Download triggered - Telegram: ${isTelegram}, Android: ${isAndroid}, iOS: ${isIOS}`);
-        
+
         if (isTelegram) {
           console.log('Using enhanced Telegram download strategies');
-          
+
           // Universal Telegram approach: data URL with instructions
           document.body.appendChild(link);
-          
+
           // Try multiple click methods
           try {
             link.click();
@@ -250,7 +250,7 @@ const App: React.FC = () => {
             });
             link.dispatchEvent(event);
           }
-          
+
           // Telegram-specific fallbacks
           setTimeout(() => {
             try {
@@ -271,14 +271,14 @@ const App: React.FC = () => {
               window.open(dataURL, '_blank');
             }
           }, 100);
-          
+
           // Clean up
           setTimeout(() => {
             if (document.body.contains(link)) {
               document.body.removeChild(link);
             }
           }, 500);
-          
+
           // Show user guidance
           setTimeout(() => {
             if (isAndroid) {
@@ -289,19 +289,19 @@ const App: React.FC = () => {
               alert('Download started! Check your downloads folder or browser downloads.');
             }
           }, 200);
-          
+
         } else {
           // Standard behavior for other browsers
           console.log('Using standard download behavior');
           link.click();
         }
-        
+
         exporter.dispose();
       } catch (exportError) {
         exporter.dispose();
         throw exportError;
       }
-      
+
     } catch (err) {
       console.error("Error generating meme:", err);
       alert("Sorry, there was an error generating your meme. Please try again.");
@@ -312,10 +312,10 @@ const App: React.FC = () => {
   const getImageBlob = async (): Promise<Blob> => {
     try {
       setSelectedLayerId(null);
-      
+
       // Wait for UI to update
       await new Promise(resolve => setTimeout(resolve, 100));
-      
+
       if (!baseImage) {
         throw new Error('Please add a base image before sharing.');
       }
@@ -323,7 +323,7 @@ const App: React.FC = () => {
       // Load base image
       const baseImageElement = new Image();
       baseImageElement.crossOrigin = 'anonymous';
-      
+
       await new Promise((resolve, reject) => {
         baseImageElement.onload = resolve;
         baseImageElement.onerror = reject;
@@ -342,7 +342,7 @@ const App: React.FC = () => {
 
       // Use canvas exporter (unified pipeline)
       const exporter = new CanvasExporter();
-      
+
       try {
         const blob = await exporter.exportToBlob(
           baseImageElement,
@@ -355,14 +355,14 @@ const App: React.FC = () => {
             targetScale: window.devicePixelRatio || 1
           }
         );
-        
+
         exporter.dispose();
         return blob;
       } catch (exportError) {
         exporter.dispose();
         throw exportError;
       }
-      
+
     } catch (error) {
       console.error('Error generating image blob:', error);
       throw new Error('Failed to generate image for sharing');
@@ -424,7 +424,7 @@ const App: React.FC = () => {
   const handleInteractionMove = useCallback((event: MouseEvent | TouchEvent) => {
     if (!activeInteraction || !mainCanvasAreaRef.current) return;
     if (event.type === 'touchmove') {
-        event.preventDefault(); // Prevent scroll on touch
+      event.preventDefault(); // Prevent scroll on touch
     }
 
     const canvasRect = mainCanvasAreaRef.current.getBoundingClientRect();
@@ -433,7 +433,7 @@ const App: React.FC = () => {
     const clientY = isTouchEvent ? (event as TouchEvent).touches[0].clientY : (event as MouseEvent).clientY;
 
     const { interactionType, originalLayer, initialMouseX, initialMouseY, layerType } = activeInteraction;
-    
+
     setLayers((prevLayers) =>
       prevLayers.map((l) => {
         if (l.id !== activeInteraction.layerId) return l;
@@ -459,8 +459,8 @@ const App: React.FC = () => {
             // If height driven by deltaY is proportionally larger, use that
             const heightFromDeltaY = Math.max(MIN_LAYER_DIMENSION, (originalLayer.height || 0) + deltaY);
             if (heightFromDeltaY / (originalLayer.aspectRatio || 1) > newWidth) {
-                newHeight = heightFromDeltaY;
-                newWidth = Math.max(MIN_LAYER_DIMENSION, newHeight * (originalLayer.aspectRatio || 1));
+              newHeight = heightFromDeltaY;
+              newWidth = Math.max(MIN_LAYER_DIMENSION, newHeight * (originalLayer.aspectRatio || 1));
             }
 
           } else { // Text layer or sticker without aspect ratio (fallback)
@@ -470,7 +470,7 @@ const App: React.FC = () => {
         } else if (interactionType === 'rotate') {
           const { layerCenterX, layerCenterY, initialMouseAngleToCenterRad, originalLayerRotationRad } = activeInteraction;
           if (layerCenterX === undefined || layerCenterY === undefined || initialMouseAngleToCenterRad === undefined || originalLayerRotationRad === undefined) return l;
-          
+
           const currentMouseAngleRad = Math.atan2(clientY - layerCenterY, clientX - layerCenterX);
           const angleDiffRad = currentMouseAngleRad - initialMouseAngleToCenterRad;
           newRotation = (originalLayerRotationRad + angleDiffRad) * (180 / Math.PI);
@@ -502,7 +502,7 @@ const App: React.FC = () => {
       window.removeEventListener('touchend', endHandler);
     };
   }, [activeInteraction, handleInteractionMove, handleInteractionEnd]);
-  
+
   useEffect(() => {
     // Dynamically load meme templates
     const loadTemplates = async () => {
@@ -539,18 +539,18 @@ const App: React.FC = () => {
     const handleClickOutside = (event: MouseEvent) => {
       // Check if click is on canvas background (mainCanvasAreaRef) itself
       if (mainCanvasAreaRef.current && event.target === mainCanvasAreaRef.current) {
-         setSelectedLayerId(null);
-         return;
+        setSelectedLayerId(null);
+        return;
       }
 
       // Check if click is outside canvas AND toolbar
       const toolbarElement = document.getElementById('toolbar');
       if (mainCanvasAreaRef.current && !mainCanvasAreaRef.current.contains(event.target as Node) &&
-          (!toolbarElement || !toolbarElement.contains(event.target as Node))) {
+        (!toolbarElement || !toolbarElement.contains(event.target as Node))) {
         // Further check it's not within a gallery modal
         const galleryElement = document.querySelector('.fixed.inset-0.bg-black'); // Generic selector for modal backdrops
-         if (!galleryElement || !galleryElement.contains(event.target as Node)){
-            setSelectedLayerId(null);
+        if (!galleryElement || !galleryElement.contains(event.target as Node)) {
+          setSelectedLayerId(null);
         }
       }
     };
@@ -583,18 +583,17 @@ const App: React.FC = () => {
             className="hidden"
           />
           {baseImage && (
-             <button 
-                onClick={handleExportMeme}
-                className={`px-3 py-1.5 sm:px-4 sm:py-2 bg-accent-green text-brand-black font-semibold rounded-md hover:bg-opacity-80 transition-colors duration-150 text-xs sm:text-sm`}
-             >
-                Download
-             </button>
+            <button
+              onClick={handleExportMeme}
+              className={`px-3 py-1.5 sm:px-4 sm:py-2 bg-accent-green text-brand-black font-semibold rounded-md hover:bg-opacity-80 transition-colors duration-150 text-xs sm:text-sm`}
+            >
+              Download
+            </button>
           )}
         </div>
       </header>
 
-      {/* Debug component for testing share functionality */}
-      {process.env.NODE_ENV === 'development' && <ShareDebugger />}
+
 
       <div className="flex flex-1 overflow-hidden flex-col md:flex-row">
         <Toolbar
@@ -651,7 +650,7 @@ const App: React.FC = () => {
         </main>
       </div>
       {showMemeTemplateGallery && (
-        <MemeTemplateGallery 
+        <MemeTemplateGallery
           templates={dynamicTemplates}
           onSelectTemplate={handleSelectMemeTemplate}
           onClose={() => setShowMemeTemplateGallery(false)}

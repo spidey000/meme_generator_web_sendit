@@ -17,20 +17,39 @@ app.use(morgan('dev'));
 
 // Authentication middleware for API endpoints
 app.use('/api/', async (req, res, next) => {
+  console.log(`[DEBUG] Auth middleware: ${req.method} ${req.path}`, {
+    method: req.method,
+    path: req.path,
+    headers: req.headers,
+    env: process.env.NODE_ENV
+  });
+  
+  // Skip authentication for OPTIONS requests (CORS preflight)
+  if (req.method === 'OPTIONS') {
+    console.log('[DEBUG] Skipping auth for OPTIONS request');
+    return next();
+  }
+  
   if (process.env.NODE_ENV === 'development') {
+    console.log('[DEBUG] Skipping auth in development mode');
     return next(); // Skip auth in development
   }
   
   const authHeader = req.headers.authorization;
+  console.log('[DEBUG] Auth header:', authHeader ? 'Present' : 'Missing');
+  
   if (!authHeader) {
+    console.log('[DEBUG] Returning 401 - Missing authentication');
     return res.status(401).json({ error: 'Missing authentication' });
   }
   
   // Simple validation for now - enhance later
   if (!authHeader.startsWith('Bearer ')) {
+    console.log('[DEBUG] Returning 401 - Invalid authentication format');
     return res.status(401).json({ error: 'Invalid authentication format' });
   }
   
+  console.log('[DEBUG] Authentication successful, proceeding to next middleware');
   next();
 });
 

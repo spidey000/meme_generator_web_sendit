@@ -235,6 +235,13 @@ function testEndpointAvailability(baseUrl, endpointPath, method = 'GET') {
     const startTime = Date.now();
     const url = `${baseUrl}/api/${endpointPath}`;
     
+    console.log(`[DEBUG] Testing endpoint: ${method} ${url}`, {
+      baseUrl,
+      endpointPath,
+      method,
+      isLocal: baseUrl.includes('localhost')
+    });
+    
     // Use HTTP for local testing, HTTPS for production
     const isLocal = baseUrl.includes('localhost') || baseUrl.includes('127.0.0.1');
     const httpModule = isLocal ? http : https;
@@ -249,6 +256,12 @@ function testEndpointAvailability(baseUrl, endpointPath, method = 'GET') {
       }
     }, (res) => {
       const responseTime = Date.now() - startTime;
+      
+      console.log(`[DEBUG] Endpoint response: ${endpointPath}`, {
+        statusCode: res.statusCode,
+        headers: res.headers,
+        responseTime
+      });
       
       if (res.statusCode === 200 || res.statusCode === 204) {
         resolve({
@@ -266,6 +279,10 @@ function testEndpointAvailability(baseUrl, endpointPath, method = 'GET') {
     });
 
     req.on('error', (error) => {
+      console.log(`[DEBUG] Endpoint error: ${endpointPath}`, {
+        error: error.message,
+        responseTime: Date.now() - startTime
+      });
       resolve({
         status: 'unreachable',
         responseTime: Date.now() - startTime,
@@ -274,6 +291,7 @@ function testEndpointAvailability(baseUrl, endpointPath, method = 'GET') {
     });
 
     req.on('timeout', () => {
+      console.log(`[DEBUG] Endpoint timeout: ${endpointPath}`);
       req.destroy();
       resolve({
         status: 'timeout',
